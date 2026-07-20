@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Visual-HN",
+  "version": "0.1.0",
+  "description": "Adds per item on hcker.news a 16:9 story thumbnail, a favicon before the title, and the og description on its own line, plus hover preview, a click lightbox with zoom controls, and an on-site toggle — powered by the Visual-HN API.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://hcker.news/*",
+    "https://hn.is-ai-good-yet.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://hcker.news/*"],
+      "js": ["src/dom.js", "src/api.js", "src/content.js"],
+      "css": ["styles/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": { "page": "options/options.html", "open_in_tab": false },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,27 @@
+__pycache__
+*.pyc
+.venv
+*.db
+.pytest_cache
+node_modules
+.idea
+logs
+static/images
+/.serena
+static/css/output.css
+bun.lock
+pnpm-lock.yaml
+/.node-venv
+
+# Runtime log from the residential fetcher (written by start-fetcher.ps1)
+fetcher.log
+
+# Watchdog action log (written by watch-fetcher.ps1)
+watch-fetcher.log
+
+# Watchdog simulation log (written by watchdog-sim.ps1, one-off diagnostic)
+watchdog-sim.log
+
+# Internal docs (IPs, secrets, topology) — synced via HyperVault, not committed
+docs_internal/
+/.zcode

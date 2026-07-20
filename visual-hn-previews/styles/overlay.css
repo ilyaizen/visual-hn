@@ -1,0 +1,811 @@
+/* overlay.css — one 16:9 thumbnail per story (top-left, above the title), a
+   polished hover preview card, a click-to-open lightbox, and an on-site
+   status/toggle control. All classes are vhn- prefixed to avoid colliding
+   with hcker.news styles. */
+
+/* Master kill-switch: when disabled, hide every injected thumbnail without
+   removing it (re-enable is instant). Controls pill stays visible. */
+.vhn-disabled .vhn-thumb-wrap {
+  display: none !important;
+}
+
+/* ----- thumbnail (16:9, block BELOW the description, ~w-lg) ----- */
+.vhn-thumb-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 512px; /* ~ Tailwind w-lg */
+  margin: 8px 0 20px;
+  z-index: 1;
+}
+
+/* Clips the 10% zoom to the 16:9 box. Separate from .vhn-thumb-wrap so the
+   absolutely-positioned hover preview is NOT clipped by overflow:hidden. */
+.vhn-thumb-frame {
+  display: block;
+  overflow: hidden;
+  border-radius: 4px;
+  /* No background: a frame bg bleeds through its own border-radius
+     anti-aliasing, producing a thin white ring at the corners. The
+     white backing for transparent PNGs lives on .vhn-thumb instead,
+     where overflow:hidden on the frame clips it cleanly. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Spacer placeholder when no image is available */
+.vhn-thumb-spacer {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(127, 127, 127, 0.08);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.vhn-thumb-wrap.vhn-ar-square .vhn-thumb-spacer { aspect-ratio: 1 / 1; }
+.vhn-thumb-wrap.vhn-ar-portrait .vhn-thumb-spacer { aspect-ratio: 3 / 4; }
+
+/* Stacking root-cause fix: every .vhn-thumb-wrap is a `position:relative`
+   stacking context at z-index:1, so the preview's z-index only ranks it
+   INSIDE its own wrap. A later sibling story's wrap (also z-index:1, later in
+   DOM order) therefore paints on top of an earlier wrap's preview. Lifting the
+   whole hovered wrap just above its siblings lets the preview escape them —
+   keep this small (not max-int) so it still loses to the page's own header. */
+.vhn-thumb-wrap:hover {
+  z-index: 2;
+}
+
+.vhn-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  cursor: zoom-in;
+  background: #ffffff; /* white behind transparent PNGs; clipped by frame's
+                          overflow:hidden + border-radius so no ring leaks */
+  transform: scale(1.1); /* 10% zoom, cropped by .vhn-thumb-frame */
+  transition: transform 0.2s ease;
+}
+
+.vhn-thumb-frame:hover,
+.vhn-thumb-wrap.vhn-title-hovered .vhn-thumb-frame {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.vhn-thumb-frame:hover .vhn-thumb,
+.vhn-thumb-wrap.vhn-title-hovered .vhn-thumb {
+  transform: scale(1.14);
+}
+
+/* xs/md: ease-in-out from ~60% (scale 1.67) to 80% (scale 1.25) on hover */
+.vhn-thumb-wrap.vhn-xs:hover .vhn-thumb-frame .vhn-thumb,
+.vhn-thumb-wrap.vhn-xs.vhn-title-hovered .vhn-thumb-frame .vhn-thumb,
+.vhn-thumb-wrap.vhn-md:hover .vhn-thumb-frame .vhn-thumb,
+.vhn-thumb-wrap.vhn-md.vhn-title-hovered .vhn-thumb-frame .vhn-thumb {
+  transform: scale(1.25);
+}
+
+/* ----- large mode: <a> wrapping the thumb opens the story ----- */
+.vhn-thumb-wrap.vhn-large {
+  text-decoration: none;
+  cursor: pointer;
+}
+.vhn-thumb-wrap.vhn-large .vhn-thumb {
+  cursor: pointer; /* navigates to the story, not zoom */
+}
+
+/* Title highlight when the (large) image shares the title's hover group.
+   Matches hcker.news link hover style (no underline, just color change). */
+.vhn-title-hot {
+  color: var(--story-title-hover-color, #ff6600);
+}
+
+/* ----- extra-small mode: fixed left column, text in a right column ----- */
+.vhn-xs-host {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.vhn-xs-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vhn-thumb-wrap.vhn-xs {
+  flex: none;
+  width: 80px;
+  max-width: 80px;
+  margin: 2px 0;
+}
+.vhn-thumb-wrap.vhn-xs .vhn-thumb {
+  cursor: zoom-in;
+  transform: scale(2.5); /* zoomed-in: ~40% visible, centered; ease-in-out to 80% on hover */
+  transform-origin: center;
+  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ----- medium mode: wider fixed left column, hover preview ----- */
+.vhn-thumb-wrap.vhn-md {
+  flex: none;
+  width: 200px;
+  max-width: 200px;
+  margin: 2px 0;
+}
+.vhn-thumb-wrap.vhn-md .vhn-thumb {
+  cursor: zoom-in;
+  transform: scale(2.5); /* zoomed-in: ~40% visible, centered; ease-in-out to 80% on hover */
+  transform-origin: center;
+  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ----- aspect ratio overrides (landscape = 4:3, portrait = 3:4) ----- */
+/* Square: 1:1 */
+.vhn-thumb-wrap.vhn-ar-square .vhn-thumb {
+  aspect-ratio: 1 / 1;
+}
+.vhn-thumb-wrap.vhn-xs.vhn-ar-square .vhn-thumb {
+  height: 80px;
+}
+.vhn-thumb-wrap.vhn-md.vhn-ar-square .vhn-thumb {
+  height: 200px;
+}
+
+/* Portrait: 3:4 */
+.vhn-thumb-wrap.vhn-ar-portrait .vhn-thumb {
+  aspect-ratio: 3 / 4;
+}
+.vhn-thumb-wrap.vhn-xs.vhn-ar-portrait .vhn-thumb {
+  height: 107px;
+}
+.vhn-thumb-wrap.vhn-md.vhn-ar-portrait .vhn-thumb {
+  height: 267px;
+}
+
+/* ----- inline favicon (before the title) + description (new line) ----- */
+.vhn-disabled .vhn-fav-badge,
+.vhn-disabled .vhn-desc {
+  display: none !important;
+}
+.vhn-desc-hidden .vhn-desc {
+  display: none !important;
+}
+
+/* Inverse-theme circle around the favicon (mirrors visual-hn story-favicon).
+   Light page -> dark circle; dark page -> light circle.
+   Uses hcker.news's --text-color CSS variable, which is always set to the
+   inverse luminance of the page background per active theme (light/dark/
+   manila/midnight/gruvbox/etc). It cascades live from body, so the badge
+   updates instantly when the user switches themes WITHOUT requiring a
+   re-injection or page refresh. For the Chrome extension context (where
+   --text-color may not be defined), falls back to prefers-color-scheme. */
+.vhn-fav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+  margin-right: 0.35em;
+  border-radius: 50%;
+  background: var(--text-color, #111);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  vertical-align: middle;
+  flex: none;
+  line-height: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .vhn-fav-badge {
+    background: var(--text-color, #f5f5f5);
+  }
+}
+
+.vhn-title-favicon {
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 3px;
+  display: block;
+}
+
+.vhn-desc {
+  margin: 0.35em 0 0.1em;
+  font-family: var(--story-font-family, inherit); /* match hcker.news title font */
+  font-size: var(--font-size-smallest, 13px);
+  line-height: 1.4;
+  color: inherit; /* match the subtext line's (comments/author/date) text color */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ----- hover preview card (no layout shift: absolutely positioned) ----- */
+.vhn-preview {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 99;
+  width: 360px;
+  max-width: 80vw;
+  padding: 6px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top left;
+  pointer-events: none; /* preview never steals hover */
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.vhn-preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+}
+
+/* favicon + domain caption under the hover preview image */
+.vhn-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 0 2px;
+  font-family: var(--story-meta-font-family, inherit);
+  font-size: var(--font-size-smallest, 12px);
+  line-height: 1.3;
+  color: #555;
+}
+.vhn-preview-meta:empty {
+  display: none;
+}
+.vhn-favicon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 3px;
+}
+.vhn-preview-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vhn-thumb-wrap:hover .vhn-preview {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* When hover preview is disabled via settings toggle */
+.vhn-hover-disabled .vhn-thumb-wrap:hover .vhn-preview {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+/* ----- lightbox / modal (pan & zoom viewer) ----- */
+.vhn-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: none;
+  background: rgba(0, 0, 0, 0.88);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.vhn-modal.vhn-open {
+  display: block;
+}
+
+.vhn-modal.vhn-dragging {
+  cursor: grabbing;
+}
+
+/* Viewer stage: fills the entire modal so the image can pan underneath the
+   floating bottom bar (where backdrop-filter blurs real pixels). */
+.vhn-modal-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* White background only on the image itself (for transparent PNGs),
+   not the whole stage — keeps the transparent dark overlay outside. */
+.vhn-modal-img {
+  position: absolute;
+  max-width: none;
+  max-height: none;
+  will-change: transform;
+  pointer-events: none;
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+/* Bottom bar: floating overlay at the bottom of the modal. The stage fills
+   the whole viewport behind it, so when the image pans underneath,
+   backdrop-filter blurs the actual image — same glass effect as the close
+   button. The stage's 0.92 fit factor already leaves ~8% margin; if the fit
+   image's bottom edge peeks behind the bar, the blur is the feature. */
+.vhn-modal-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--story-meta-font-family, inherit);
+  font-size: var(--font-size-smallest, 13px);
+  line-height: 1.4;
+  color: #eee;
+  pointer-events: auto;
+}
+
+.vhn-modal-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vhn-modal-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vhn-modal-favicon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  margin-top: 2px;
+}
+
+
+.vhn-modal-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-underline-offset: 3px;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.vhn-modal-title:hover {
+  text-decoration-color: #fdba74;
+  color: #fdba74;
+}
+
+.vhn-modal-desc {
+  font-size: var(--font-size-smallest, 12px);
+  color: #aaa;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vhn-modal-desc:empty {
+  display: none;
+}
+
+/* Zoom controls: 2×2 glass grid with SVG icons (fit / actual / out / in) */
+.vhn-modal-zoom {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.vhn-zoom-btn {
+  cursor: pointer;
+  border: 0;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.vhn-zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.vhn-zoom-btn svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+/* Close button top-right — translucent pill with SVG cross */
+.vhn-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  cursor: pointer;
+  border: 0;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease;
+}
+.vhn-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.vhn-modal-close svg {
+  width: 16px;
+  height: 16px;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* ----- hcker.news settings-panel integration ----- */
+/* Force-wrap so our section drops below the 2-column native rows */
+.settings-sections-wrapper {
+  flex-wrap: wrap !important;
+}
+
+/* Our Previews section fills a full-width row below the 2-column native sections */
+.vhn-settings-section {
+  flex: 0 0 100% !important;
+  box-sizing: border-box;
+}
+
+.vhn-settings-section .settings-section-content {
+  max-width: none;
+}
+
+/* Custom dropdown (matches hcker.news typography dropdown) */
+.vhn-custom-dropdown {
+  position: relative;
+  width: 220px;
+}
+
+.vhn-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--button-border-color, #b8b8b0);
+  border-radius: 3px;
+  background: var(--button-bg-color, #e8e8e0);
+  color: var(--text-color, inherit);
+  font: inherit;
+  font-size: 14.4px;
+  cursor: pointer;
+}
+
+.vhn-dropdown-arrow {
+  flex: none;
+  color: inherit;
+}
+
+.vhn-dropdown-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 100;
+  width: 100%;
+  margin-top: 2px;
+  border: 1px solid var(--button-border-color, #b8b8b0);
+  border-radius: 6px;
+  background: var(--dropdown-bg-color, #fff);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.vhn-dropdown-menu[aria-hidden="true"] {
+  display: none;
+}
+
+.vhn-dropdown-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-color, inherit);
+  font: inherit;
+  font-size: 14.4px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vhn-dropdown-option:hover {
+  background: var(--button-hover-bg-color, rgba(0, 0, 0, 0.05));
+}
+
+.vhn-dropdown-option.active {
+  background: var(--accent-color, #ff6600);
+  color: #fff;
+}
+
+
+
+/* ----- old on-site status + toggle control (unused; kept for older pages) ----- */
+.vhn-controls {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(20, 20, 20, 0.86);
+  color: #eee;
+  font:
+    12px/1.2 system-ui,
+    sans-serif;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.vhn-toggle {
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #ff6600;
+}
+
+.vhn-controls.vhn-off .vhn-toggle {
+  background: #555;
+}
+
+/* secondary pill: cycles large <-> XS image position */
+.vhn-size {
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #444;
+}
+.vhn-size:hover {
+  background: #333;
+}
+
+.vhn-status {
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+  .vhn-preview {
+    background: #1a1a1a;
+  }
+  .vhn-preview-meta {
+    color: #bbb;
+  }
+}
+
+#header .tagline a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  cursor: pointer;
+}
+
+/* ----- rainbow header chars ("visual") ----- */
+.vhn-rainbow-char {
+  --_c: currentColor;
+  display: inline-block;
+  color: var(--_c);
+  opacity: 0;
+  transform: translateY(4px);
+  animation: vhn-char-pop 0.3s ease calc(var(--i, 0) * 0.12s + 0.15s) forwards;
+  transition: color 0.5s ease;
+}
+
+/* Rainbow palette — stepped per character */
+.vhn-rainbow-char:nth-child(1) { --_c: #ff6b6b; }
+.vhn-rainbow-char:nth-child(2) { --_c: #ffa94d; }
+.vhn-rainbow-char:nth-child(3) { --_c: #69db7c; }
+.vhn-rainbow-char:nth-child(4) { --_c: #4dabf7; }
+.vhn-rainbow-char:nth-child(5) { --_c: #9775fa; }
+.vhn-rainbow-char:nth-child(6) { --_c: #f783ac; }
+
+@keyframes vhn-char-pop {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* After 2 s, JS adds .vhn-rainbow-faded — chars transition to white */
+.vhn-rainbow.vhn-rainbow-faded .vhn-rainbow-char {
+  color: inherit;
+}
+
+/* Hover restores rainbow */
+.vhn-rainbow:hover .vhn-rainbow-char {
+  color: var(--_c);
+}
+
+/* Narrow space between "w/" and "pics" */
+.vhn-thinsp {
+  display: inline-block;
+  width: 0.15em;
+}
+
+/* Rank overlay on thumbnail (top-left corner).
+   Top-3: trophy emoji with drop-shadow (no chip background).
+   Ranks 4-30: dark chip with bare number + trend arrow when moving. */
+.vhn-rank-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0px 4px;
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.2px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+.vhn-rank-badge .vhn-rank-trend {
+  font-size: 8px;
+  line-height: 1;
+}
+.vhn-rank-badge .vhn-trend-up { color: #69db7c; }
+.vhn-rank-badge .vhn-trend-down { color: #ff6b6b; }
+
+/* Top-3 trophy: bare emoji, drop-shadow only. Descending scale so #1
+   reads as the biggest — gold > silver > bronze. */
+.vhn-rank-badge.vhn-rank-trophy {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  font-size: 22px;
+  font-weight: normal;
+  line-height: 1;
+}
+.vhn-rank-badge.vhn-rank-trophy[data-rank="2"] { font-size: 19px; }
+.vhn-rank-badge.vhn-rank-trophy[data-rank="3"] { font-size: 16px; }
+
+/* Number chips: soft float + glassy top bevel so they read as elevated,
+   matching the trophy's dimensional feel instead of a flat dark box. */
+.vhn-rank-badge:not(.vhn-rank-trophy) {
+  filter: none;
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* In large mode, scale up */
+.vhn-thumb-wrap.vhn-large .vhn-rank-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  top: 6px;
+  left: 6px;
+}
+.vhn-thumb-wrap.vhn-large .vhn-rank-badge.vhn-rank-trophy {
+  font-size: 28px;
+  padding: 0;
+}
+.vhn-thumb-wrap.vhn-large .vhn-rank-badge.vhn-rank-trophy[data-rank="2"] { font-size: 23px; }
+.vhn-thumb-wrap.vhn-large .vhn-rank-badge.vhn-rank-trophy[data-rank="3"] { font-size: 19px; }
+.vhn-thumb-wrap.vhn-large .vhn-rank-badge .vhn-rank-trend {
+  font-size: 10px;
+}
+
+/* ── Header grounding ──────────────────────────────────────────────────────
+   The sticky #header has no border-bottom or shadow in hcker.news's CSS.
+   Without it the bar looks like it floats above the story list. Add a
+   crisp bottom edge that adapts to light/dark themes via hcker.news's
+   own --line-strong variable. */
+#header {
+  border-bottom: 1px solid var(--line-strong, #ccc);
+}
+
+/* ── Mobile layout: portrait thumbnails, stacked ───────────────────────────
+   On narrow screens the 200px md column + landscape thumb is cramped.
+   Switch to full-width portrait (3:4) thumbnails stacked above the text,
+   and kill the desktop-only hover-reveal zoom. */
+@media (max-width: 640px) {
+  /* Mobile: drop the animated "visual" rainbow — header shows just "HN" */
+  .vhn-rainbow {
+    display: none !important;
+  }
+
+  /* Stack image above text instead of side-by-side */
+  .vhn-xs-host {
+    flex-direction: column !important;
+  }
+
+  /* Full-width thumbnails */
+  .vhn-thumb-wrap.vhn-md,
+  .vhn-thumb-wrap.vhn-xs {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 4px 0 10px !important;
+  }
+
+  /* Portrait aspect ratio, no zoom-reveal effect */
+  .vhn-thumb-wrap.vhn-md .vhn-thumb,
+  .vhn-thumb-wrap.vhn-xs .vhn-thumb {
+    aspect-ratio: 3 / 4 !important;
+    transform: scale(1.03) !important;
+    transition: none !important;
+    cursor: zoom-in;
+  }
+  .vhn-thumb-wrap.vhn-md .vhn-thumb-spacer,
+  .vhn-thumb-wrap.vhn-xs .vhn-thumb-spacer {
+    aspect-ratio: 3 / 4;
+  }
+
+  /* Rank badge sizing for full-width portrait thumbs */
+  .vhn-thumb-wrap.vhn-md .vhn-rank-badge,
+  .vhn-thumb-wrap.vhn-xs .vhn-rank-badge {
+    font-size: 11px;
+    padding: 1px 6px;
+    top: 6px;
+    left: 6px;
+  }
+  .vhn-thumb-wrap.vhn-md .vhn-rank-badge.vhn-rank-trophy,
+  .vhn-thumb-wrap.vhn-xs .vhn-rank-badge.vhn-rank-trophy {
+    font-size: 28px;
+  }
+
+  /* Large mode: also portrait on mobile */
+  .vhn-thumb-wrap.vhn-large .vhn-thumb {
+    aspect-ratio: 3 / 4 !important;
+  }
+
+  /* Lightbox: tighter padding on mobile */
+  .vhn-modal-bar {
+    padding: 8px 12px;
+    gap: 10px;
+  }
+  .vhn-modal-title {
+    font-size: 14px;
+  }
+}

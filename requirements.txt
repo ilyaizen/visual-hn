@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+aiohttp
+aiosqlite
+beautifulsoup4
+pydantic
+jinja2
+pillow
+playwright
+sqlalchemy
+greenlet
+pytest
+pytest-asyncio
+httpx
+curl_cffi
+slowapi

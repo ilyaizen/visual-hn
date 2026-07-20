@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+
+    <title>YAHNC</title>
+    <meta name="description" content="A visual Hacker News front page with rich link cards, trends, images, and fallbacks." />
+    <meta name="author" content="Ilya Aizenberg" />
+    <meta name="keywords" content="Hacker News, Clone, Trends, Images, Link Cards" />
+
+    <meta property="og:title" content="YAHNC - Visual Hacker News" />
+    <meta property="og:description" content="Hacker News top stories presented as a clean two-column visual digest." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="{{ request.url }}" />
+    <meta property="og:image" content="{{ request.base_url }}static/images/logo.png" />
+    <meta property="og:site_name" content="YAHNC" />
+
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='/favicon.ico') }}" />
+    <link rel="apple-touch-icon" href="{{ url_for('static', path='/apple-touch-icon.png') }}" />
+    <link rel="manifest" href="{{ url_for('static', path='/site.webmanifest') }}" />
+    <link href="{{ url_for('static', path='/css/output.css') }}" rel="stylesheet" />
+    <style>
+      body.comments-split-active main {
+        max-width: none;
+        margin-left: 0;
+        margin-right: auto;
+        width: 50vw;
+      }
+
+      body.comments-split-active footer {
+        margin-left: 0;
+        margin-right: auto;
+        width: 50vw;
+      }
+
+      #comments-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 50vw;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+        background: rgba(2, 6, 23, 0.98);
+        border-left: 2px solid rgba(255, 255, 255, 0.1);
+        box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(12px);
+        z-index: 50;
+      }
+
+      body.comments-split-active #comments-panel {
+        display: flex;
+      }
+
+      .story-card:has(.story-image-link:hover) .story-title {
+        text-decoration-line: underline;
+      }
+
+      @media (max-width: 1023px) {
+        body.comments-split-active main,
+        body.comments-split-active footer {
+          width: 100vw;
+        }
+
+        #comments-panel {
+          width: 100vw;
+          top: auto;
+          height: 50vh;
+          border-left: 0;
+          border-top: 2px solid rgba(255, 255, 255, 0.1);
+        }
+      }
+    </style>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-3LX6MHLD3J"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('consent', 'default', { analytics_storage: 'denied' });
+      gtag('js', new Date());
+      gtag('config', 'G-3LX6MHLD3J');
+    </script>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div class="ambient-background pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+      <div class="ambient-blob ambient-blob--orange"></div>
+      <div class="ambient-blob ambient-blob--gold"></div>
+      <div class="ambient-blob ambient-blob--blue"></div>
+    </div>
+
+    <main class="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <header class="mb-8 overflow-hidden rounded-2xl border-2 border-white/10 bg-white/[0.06] p-5 shadow-2xl shadow-black/30 backdrop-blur md:p-8">
+        <div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div class="flex items-center gap-4">
+            <div class="rounded-xl border-2 border-white/10 bg-white/10 p-3 shadow-lg shadow-orange-950/20">
+              <img src="{{ url_for('static', path='/images/logo.png') }}" alt="YAHNC Logo" class="h-14 w-14 object-contain" />
+            </div>
+            <div>
+              <p class="mb-2 inline-flex rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-200">
+                Visual HN Digest
+              </p>
+              <h1 class="text-3xl font-black tracking-tight text-white sm:text-5xl">Yet Another HN Clone</h1>
+              <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                Top Hacker News stories in a clean two-column grid, enriched with metadata, cached images, and screenshot fallbacks when social cards are missing.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center md:justify-end">
+            <button
+              id="comments-split-toggle"
+              type="button"
+              aria-pressed="false"
+              style="display: inline-flex; align-items: center; gap: 0.75rem; border-radius: 9999px; border: 2px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.05); padding: 0.8rem 1rem; color: #cbd5e1; font-size: 0.875rem; font-weight: 600; transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;"
+            >
+              <span style="display: inline-flex; height: 0.85rem; width: 0.85rem; align-items: center; justify-content: center; border-radius: 9999px; background: rgba(148, 163, 184, 0.35);">
+                <span id="comments-split-dot" style="height: 0.4rem; width: 0.4rem; border-radius: 9999px; background: #cbd5e1;"></span>
+              </span>
+              <span>Inline comments</span>
+              <span id="comments-split-state" style="border-radius: 9999px; background: rgba(15, 23, 42, 0.9); padding: 0.2rem 0.5rem; font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: #94a3b8;">
+                Off
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section class="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:gap-6">
+        {% if stories %} {% for story in stories %}
+        <article class="story-card group flex h-full flex-col overflow-hidden rounded-xl border-2 border-white/10 bg-slate-900/80 shadow-xl shadow-black/25 transition duration-300 hover:-translate-y-1 hover:border-orange-300/30 hover:bg-slate-900">
+          <a href="{{ story.url }}" target="_blank" rel="noopener noreferrer" class="story-image-link block focus:outline-none focus:ring-4 focus:ring-orange-300/40">
+            <div class="story-image-container relative aspect-[4/3] overflow-hidden border-b-2 border-white/10 bg-white transition group-hover:border-orange-300/30">
+              {% set preview_image = story.og_image_url or story.image_url %}
+              {% set fallback_image = story.image_url if story.image_url and story.image_url != preview_image else '' %}
+              {% if preview_image %}
+              <img src="{{ preview_image }}" alt="Preview image for {{ story.title }}" loading="lazy" class="story-image h-full w-full object-cover" onerror="if(!this.dataset.fb&amp;&amp;this.dataset.fallback){this.dataset.fb='1';this.src=this.dataset.fallback;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}" data-fallback="{{ fallback_image }}" />
+              <div style="display:none" class="flex h-full w-full items-center justify-center bg-slate-800 text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">No preview</div>
+              {% else %}
+              <div class="flex h-full w-full items-center justify-center bg-slate-800 text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">No preview</div>
+              {% endif %}
+              <div class="absolute left-4 top-4 flex flex-wrap items-center gap-2">
+                {% if story.current_position %}
+                <span class="rounded-full bg-white/95 px-3 py-1 text-xs font-black text-slate-950 shadow-lg">
+                  {% if story.current_position == 1 %}🥇{% elif story.current_position == 2 %}🥈{% elif story.current_position == 3 %}🥉{% endif %} #{{ story.current_position }}
+                </span>
+                {% endif %}
+                {% if story.trend in ['up', 'down'] %}
+                <span class="rounded-full border border-white/15 bg-slate-950/70 px-3 py-1 text-xs font-bold backdrop-blur {% if story.trend == 'up' %}text-emerald-300{% else %}text-rose-300{% endif %}">
+                  {{ get_trend_symbol(story.trend) }} {{ story.trend }}
+                </span>
+                {% endif %}
+              </div>
+            </div>
+          </a>
+
+          <div class="flex flex-1 flex-col gap-4 p-5">
+            <a href="{{ story.url }}" target="_blank" rel="noopener noreferrer" class="flex items-start gap-3 focus:outline-none focus:ring-4 focus:ring-orange-300/40">
+              <span class="story-favicon mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/70 bg-white/95 text-[0.65rem] font-bold uppercase text-slate-500 shadow-lg shadow-black/30 ring-1 ring-black/10">
+                {% if favicon_url(story.url) %}
+                <img src="{{ favicon_url(story.url) }}" alt="" loading="lazy" class="h-5 w-5 rounded-sm" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');" />
+                <span class="hidden">↗</span>
+                {% else %}
+                <span>↗</span>
+                {% endif %}
+              </span>
+              <h2 class="story-title min-w-0 text-lg font-black leading-snug text-white no-underline decoration-2 decoration-orange-300/40 underline-offset-4 transition hover:underline group-hover:text-orange-100 sm:text-xl">
+                {{ story.title }}{% if source_domain(story.url) %} <span class="font-semibold text-slate-400">({{ source_domain(story.url) }})</span>{% endif %}
+              </h2>
+            </a>
+            {% if story.description %}
+            <p class="line-clamp-3 min-h-[4.5rem] text-sm leading-6 text-slate-300">{{ story.description }}</p>
+            {% endif %}
+
+            <div class="mt-auto flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-300">
+              <span class="rounded-lg border-2 border-white/10 bg-white/5 px-3 py-1.5">{{ story.score }} points</span>
+              <a href="{{ story.hn_url }}" target="_blank" rel="noopener noreferrer" class="comments-link rounded-lg border-2 border-orange-300/20 bg-orange-400/10 px-3 py-1.5 text-orange-200 hover:border-orange-300/50">
+                {{ story.comments_count }} comments
+              </a>
+              <a href="https://news.ycombinator.com/user?id={{ story.poster }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border-2 border-white/10 bg-white/5 px-3 py-1.5 hover:border-orange-300/40 hover:text-orange-200">
+                by {{ story.poster }}
+              </a>
+              <span class="rounded-lg border-2 border-white/10 bg-white/5 px-3 py-1.5">{{ time_ago(story.time_posted) }}</span>
+            </div>
+          </div>
+        </article>
+        {% endfor %} {% else %}
+        <div class="col-span-full rounded-3xl border border-white/10 bg-white/[0.06] p-12 text-center text-slate-300">
+          No stories available yet. The scraper will populate this page on its next run.
+        </div>
+        {% endif %}
+      </section>
+    </main>
+
+    <footer class="relative mb-10 mt-4 text-center">
+      <a href="https://github.com/ilyaizen/visual-hn" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg border-2 border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-orange-300/30 hover:text-orange-200">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2">
+          <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
+          <path d="M9 18c-4.51 2-5-2-7-2" />
+        </svg>
+        View on GitHub
+      </a>
+    </footer>
+
+    <div id="comments-panel" aria-hidden="true">
+      <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200">Inline comments</p>
+          <p id="comments-panel-title" class="mt-1 truncate text-sm font-semibold text-white">Select a comments link</p>
+        </div>
+        <button id="comments-panel-close" type="button" class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300 hover:border-orange-300/30 hover:text-orange-200">
+          Close
+        </button>
+      </div>
+      <iframe id="comments-panel-frame" title="Hacker News comments" style="flex: 1; min-height: 0; width: 100%; border: 0; background: #020617;"></iframe>
+    </div>
+
+    <div id="cookie-consent" class="fixed bottom-4 left-4 right-4 z-50 hidden rounded-xl border-2 border-white/10 bg-slate-950/95 p-4 text-center text-sm text-white shadow-2xl backdrop-blur md:left-auto md:max-w-md md:text-left">
+      <button id="close-consent" class="absolute right-3 top-3 text-slate-400 hover:text-white" aria-label="Close cookie consent banner">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <p class="mb-3 pr-7 text-slate-200">This website asks to use cookies for analytics. 🍪</p>
+      <button id="accept-cookies" class="rounded-full bg-orange-400 px-4 py-2 font-bold text-slate-950 hover:bg-orange-300" aria-label="Accept cookies">
+        Accept cookies
+      </button>
+    </div>
+
+    <script>
+      const commentsSplitToggle = document.getElementById('comments-split-toggle');
+      const commentsSplitDot = document.getElementById('comments-split-dot');
+      const commentsSplitState = document.getElementById('comments-split-state');
+      const commentsPanel = document.getElementById('comments-panel');
+      const commentsPanelFrame = document.getElementById('comments-panel-frame');
+      const commentsPanelTitle = document.getElementById('comments-panel-title');
+      const commentsPanelClose = document.getElementById('comments-panel-close');
+      const commentsProxyBase = '{{ url_for("hn_comments_proxy") }}';
+      const inlineCommentsStorageKey = 'yahnc-inline-comments';
+
+      function setCookie(name, value, days) {
+        const date = new Date();
+        date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+        document.cookie = name + '=' + value + ';expires=' + date.toUTCString() + ';path=/';
+      }
+
+      function getCookie(name) {
+        const value = '; ' + document.cookie;
+        const parts = value.split('; ' + name + '=');
+        if (parts.length === 2) return parts.pop().split(';').shift();
+      }
+
+      function setInlineCommentsButton(enabled) {
+        commentsSplitToggle.setAttribute('aria-pressed', String(enabled));
+        commentsSplitState.textContent = enabled ? 'On' : 'Off';
+        commentsSplitState.style.background = enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.9)';
+        commentsSplitState.style.color = enabled ? '#a7f3d0' : '#94a3b8';
+        commentsSplitDot.style.background = enabled ? '#6ee7b7' : '#cbd5e1';
+        commentsSplitDot.parentElement.style.background = enabled ? 'rgba(16, 185, 129, 0.22)' : 'rgba(148, 163, 184, 0.35)';
+        commentsSplitToggle.style.borderColor = enabled ? 'rgba(251, 146, 60, 0.4)' : 'rgba(255, 255, 255, 0.1)';
+        commentsSplitToggle.style.background = enabled ? 'rgba(251, 146, 60, 0.1)' : 'rgba(255, 255, 255, 0.05)';
+        commentsSplitToggle.style.color = enabled ? '#ffedd5' : '#cbd5e1';
+      }
+
+      function getInlineCommentsEnabled() {
+        try {
+          return localStorage.getItem(inlineCommentsStorageKey) === 'true';
+        } catch {
+          return false;
+        }
+      }
+
+      function setInlineCommentsEnabled(enabled) {
+        setInlineCommentsButton(enabled);
+        try {
+          localStorage.setItem(inlineCommentsStorageKey, enabled ? 'true' : 'false');
+        } catch {
+          /* ignore storage errors */
+        }
+        if (!enabled) {
+          closeCommentsPanel();
+        }
+      }
+
+      function openCommentsPanel(link) {
+        const proxyUrl = new URL(commentsProxyBase, window.location.origin);
+        proxyUrl.searchParams.set('url', link.href);
+        commentsPanelFrame.src = proxyUrl.toString();
+        commentsPanelTitle.textContent = link.closest('.story-card')?.querySelector('.story-title')?.textContent?.trim() || 'Hacker News comments';
+        commentsPanel.classList.remove('hidden');
+        commentsPanel.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('comments-split-active');
+      }
+
+      function closeCommentsPanel() {
+        commentsPanel.classList.add('hidden');
+        commentsPanel.setAttribute('aria-hidden', 'true');
+        commentsPanelFrame.src = 'about:blank';
+        document.body.classList.remove('comments-split-active');
+      }
+
+      function hideCookieConsent() {
+        document.getElementById('cookie-consent').classList.add('hidden');
+      }
+
+      setInlineCommentsButton(getInlineCommentsEnabled());
+
+      commentsSplitToggle.addEventListener('click', function () {
+        setInlineCommentsEnabled(commentsSplitToggle.getAttribute('aria-pressed') !== 'true');
+      });
+
+      commentsPanelClose.addEventListener('click', closeCommentsPanel);
+
+      document.addEventListener('click', function (event) {
+        const link = event.target.closest('a.comments-link');
+        if (!link || commentsSplitToggle.getAttribute('aria-pressed') !== 'true') return;
+        event.preventDefault();
+        openCommentsPanel(link);
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !commentsPanel.classList.contains('hidden')) {
+          closeCommentsPanel();
+        }
+      });
+
+      if (!getCookie('cookie_consent')) {
+        document.getElementById('cookie-consent').classList.remove('hidden');
+      }
+
+      document.getElementById('accept-cookies').addEventListener('click', function () {
+        setCookie('cookie_consent', 'true', 365);
+        hideCookieConsent();
+        gtag('consent', 'update', { analytics_storage: 'granted' });
+      });
+
+      document.getElementById('close-consent').addEventListener('click', hideCookieConsent);
+      setTimeout(() => window.location.reload(), 900000);
+    </script>
+  </body>
+</html>
