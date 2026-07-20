@@ -13,23 +13,9 @@ Visual-HN with preview images/Open Graph metadata, descriptions, zoom, position 
 - ✅ Proxies the hcker.news homepage and injects preview assets into the response
 - ✅ Fetches Open Graph metadata (`og:image`, `og:description`) for every story
 - ✅ Downloads and resizes images to a consistent 16:9 thumbnail (max 640px JPEG)
-- ✅ Multi-layer anti-scraping pipeline: `curl_cffi` TLS fingerprinting → residential headful Chromium → Wayback Machine → screenshot → favicon composite
 - ✅ Tracks each story's position trend over time (rising / falling / steady)
 - ✅ Exposes story metadata and image assets through the Visual-HN API
 - ✅ Async SQLite persistence via SQLAlchemy + aiosqlite
-
-### Browser extension (`visual-hn-previews/`)
-
-- ✅ 16:9 story thumbnail beside every headline
-- ✅ Source favicon before the title
-- ✅ Open Graph / meta description line under the title
-- ✅ Hover preview card
-- ✅ Click-to-open lightbox with zoom controls
-- ✅ On-site toggle + thumbnail size control
-- ✅ Keyboard shortcuts: <kbd>I</kbd> toggles thumbnails, <kbd>Esc</kbd> closes the lightbox
-- ✅ Dedupe-safe and idempotent for infinite scroll and client-side navigation
-- ✅ Gracefully hides missing or broken images
-- ✅ Settings sync via `chrome.storage.sync` and apply live
 
 ## Tech Stack
 
