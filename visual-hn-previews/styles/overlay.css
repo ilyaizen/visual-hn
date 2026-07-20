@@ -472,14 +472,13 @@
 }
 
 /* ----- hcker.news settings-panel integration ----- */
-/* Force-wrap so our section drops below the 2-column native rows */
+/* Force-wrap so sections stack into a 2-column grid */
 .settings-sections-wrapper {
   flex-wrap: wrap !important;
 }
 
-/* Our Previews section takes half width so it stacks in a 2-column grid
-   alongside the native hcker.news settings sections. */
-.vhn-settings-section {
+/* All sections take 50% so they pair up in two columns */
+.settings-sections-wrapper > * {
   flex: 0 0 50% !important;
   box-sizing: border-box;
 }
