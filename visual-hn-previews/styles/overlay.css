@@ -477,9 +477,10 @@
   flex-wrap: wrap !important;
 }
 
-/* Our Previews section fills a full-width row below the 2-column native sections */
+/* Our Previews section takes half width so it stacks in a 2-column grid
+   alongside the native hcker.news settings sections. */
 .vhn-settings-section {
-  flex: 0 0 100% !important;
+  flex: 0 0 50% !important;
   box-sizing: border-box;
 }
 
@@ -761,9 +762,13 @@
    Switch to full-width portrait (3:4) thumbnails stacked above the text,
    and kill the desktop-only hover-reveal zoom. */
 @media (max-width: 640px) {
-  /* Mobile: drop the animated "visual" rainbow — header shows just "HN" */
-  .vhn-rainbow {
+  /* Mobile: compact "vhn" logo — hide rainbow animation + suffix */
+  #header h1 a .vhn-rainbow,
+  #header h1 a .vhn-logo-suffix {
     display: none !important;
+  }
+  #header h1 a::after {
+    content: 'vhn';
   }
 
   /* Stack image above text instead of side-by-side */
@@ -779,17 +784,17 @@
     margin: 4px 0 10px !important;
   }
 
-  /* Portrait aspect ratio, no zoom-reveal effect */
+  /* Landscape aspect ratio, no zoom-reveal effect */
   .vhn-thumb-wrap.vhn-md .vhn-thumb,
   .vhn-thumb-wrap.vhn-xs .vhn-thumb {
-    aspect-ratio: 3 / 4 !important;
+    aspect-ratio: 16 / 9 !important;
     transform: scale(1.03) !important;
     transition: none !important;
     cursor: zoom-in;
   }
   .vhn-thumb-wrap.vhn-md .vhn-thumb-spacer,
   .vhn-thumb-wrap.vhn-xs .vhn-thumb-spacer {
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 16 / 9;
   }
 
   /* Rank badge sizing for full-width portrait thumbs */
@@ -805,9 +810,9 @@
     font-size: 28px;
   }
 
-  /* Large mode: also portrait on mobile */
+  /* Large mode: also landscape on mobile */
   .vhn-thumb-wrap.vhn-large .vhn-thumb {
-    aspect-ratio: 3 / 4 !important;
+    aspect-ratio: 16 / 9 !important;
   }
 
   /* Lightbox: tighter padding on mobile */
