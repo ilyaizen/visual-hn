@@ -36,7 +36,7 @@ def _get_feed_enrichment():
 
 HCKER_NEWS_ORIGIN = "https://hcker.news"
 EXTENSION_DIR = Path(__file__).parent / "visual-hn-previews"
-PREVIEW_RUNTIME_VERSION = "20260720-v43"
+PREVIEW_RUNTIME_VERSION = "20260720-v44"
 
 # ── Simple TTL cache for upstream fetches ──────────────────────────────────
 # Avoids re-fetching hcker.news on every single request.  Two-tier TTL:
