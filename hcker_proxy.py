@@ -208,7 +208,7 @@ def rewrite_proxy_header(html: str) -> str:
         '<span class="vhn-rainbow-char" style="--i:4">a</span>'
         '<span class="vhn-rainbow-char" style="--i:5">l</span>'
         "</span>"
-        ' <span class="vhn-thinsp"></span> HN'
+        '<span class="vhn-logo-suffix">.hcker.news</span>'
     )
 
     container = None
@@ -257,7 +257,7 @@ def rewrite_proxy_header(html: str) -> str:
     tagline = container.find("span", class_="tagline")
     if tagline:
         tagline.clear()
-        tagline.string = "a hcker.news reader"
+        tagline.string = "hcker.news reader with pictures"
 
     # Inject a GitHub link into the header-links row (after "about")
     links_container = container.find(class_="header-links")
@@ -294,9 +294,9 @@ def rewrite_meta_tags(html: str) -> str:
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    VHN_TITLE = "visual HN — a hcker.news reader"
+    VHN_TITLE = "visual.hcker.news"
     VHN_DESC = (
-        "Visual-HN — a hcker.news reader. "
+        "visual.hcker.news — a hcker.news reader with pictures. "
         "Preview images, rank badges, and trend arrows for every story."
     )
     VHN_URL = "https://hn.is-ai-good-yet.com/"

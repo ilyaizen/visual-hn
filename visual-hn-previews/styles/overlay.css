@@ -660,10 +660,20 @@
   color: var(--_c);
 }
 
-/* Narrow space between "w/" and "pics" */
-.vhn-thinsp {
-  display: inline-block;
-  width: 0.15em;
+/* Logo suffix ".hcker.news" — static, next to rainbow "visual" */
+.vhn-logo-suffix {
+  color: inherit;
+}
+
+/* Tagline hidden on mobile — "reader with pictures" is too long for small screens.
+   Show at ≥640px where the header has breathing room. */
+#header .tagline {
+  display: none;
+}
+@media (min-width: 640px) {
+  #header .tagline {
+    display: inline;
+  }
 }
 
 /* Rank overlay on thumbnail (top-left corner).

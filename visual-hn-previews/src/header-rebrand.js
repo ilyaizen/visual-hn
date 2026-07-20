@@ -1,8 +1,8 @@
 // header-rebrand.js — keep the proxied hcker.news header branded across SPA hydration.
 
 (function () {
-  const BRANDED = 'visual HN';
-  const TAGLINE_HTML = 'a <a href="https://hcker.news/" target="_blank" rel="noopener">hcker.news</a> reader';
+  const BRANDED = 'visual.hcker.news';
+  const TAGLINE_HTML = 'a <a href="https://hcker.news/" target="_blank" rel="noopener">hcker.news</a> reader with pictures';
   const TITLE_RE = /^hcker\.news$/i;
   const RAINBOW_FADE_MS = 2000;
 
@@ -14,7 +14,7 @@
     '<span class="vhn-rainbow-char" style="--i:3">u</span>' +
     '<span class="vhn-rainbow-char" style="--i:4">a</span>' +
     '<span class="vhn-rainbow-char" style="--i:5">l</span>' +
-    '</span> <span class="vhn-thinsp"></span> HN';
+    '</span><span class="vhn-logo-suffix">.hcker.news</span>';
 
   let applying = false;
   let scheduled = false;
