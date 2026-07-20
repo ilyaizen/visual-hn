@@ -10,12 +10,12 @@ Visual-HN with preview images/Open Graph metadata, descriptions, zoom, position 
 
 ### Proxy & enrichment backend
 
-- ✅ Proxies the hcker.news homepage and injects preview assets into the response
-- ✅ Fetches Open Graph metadata (`og:image`, `og:description`) for every story
-- ✅ Downloads and resizes images to a consistent 16:9 thumbnail (max 640px JPEG)
-- ✅ Tracks each story's position trend over time (rising / falling / steady)
-- ✅ Exposes story metadata and image assets through the Visual-HN API
-- ✅ Async SQLite persistence via SQLAlchemy + aiosqlite
+✅ Proxies the hcker.news homepage and injects preview assets into the response
+✅ Fetches Open Graph metadata (`og:image`, `og:description`) for every story
+✅ Downloads and resizes images to a consistent 16:9 thumbnail (max 640px JPEG)
+✅ Tracks each story's position trend over time (rising / falling / steady)
+✅ Exposes story metadata and image assets through the Visual-HN API
+✅ Async SQLite persistence via SQLAlchemy + aiosqlite
 
 ## Tech Stack
 
