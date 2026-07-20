@@ -472,15 +472,15 @@
 }
 
 /* ----- hcker.news settings-panel integration ----- */
-/* Force-wrap so our section drops below the 2-column native rows */
+/* Force-wrap so sections stack into a 2-column grid */
 .settings-sections-wrapper {
   flex-wrap: wrap !important;
 }
 
-/* Our Previews section takes half width so it stacks in a 2-column grid
-   alongside the native hcker.news settings sections. */
-.vhn-settings-section {
-  flex: 0 0 50% !important;
+/* All sections take ~50% (minus gap) so they pair up in two columns.
+   Native CSS adds gap:24px, so raw 50% overflows and wraps. */
+.settings-sections-wrapper > * {
+  flex: 0 0 calc(50% - 12px) !important;
   box-sizing: border-box;
 }
 
@@ -628,14 +628,28 @@
 }
 
 /* ----- rainbow header chars ("visual") ----- */
+/* Progressive enhancement: chars are visible (not animated) by default.
+   Animation only applies when JS is active (.js class on <html>) AND
+   the user hasn't requested reduced motion. */
 .vhn-rainbow-char {
   --_c: currentColor;
   display: inline-block;
   color: var(--_c);
+  transition: color 0.5s ease;
+}
+
+.js .vhn-rainbow-char {
   opacity: 0;
   transform: translateY(4px);
   animation: vhn-char-pop 0.3s ease calc(var(--i, 0) * 0.12s + 0.15s) forwards;
-  transition: color 0.5s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .vhn-rainbow-char {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
 }
 
 /* Rainbow palette — stepped per character */
@@ -651,9 +665,17 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* After 2 s, JS adds .vhn-rainbow-faded — chars transition to white */
-.vhn-rainbow.vhn-rainbow-faded .vhn-rainbow-char {
+/* After 2 s, JS adds .vhn-rainbow-faded — chars transition to white.
+   Skipped under reduced-motion (chars stay rainbow, no transition). */
+.js .vhn-rainbow.vhn-rainbow-faded .vhn-rainbow-char {
   color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .vhn-rainbow.vhn-rainbow-faded .vhn-rainbow-char {
+    color: var(--_c);
+    transition: none;
+  }
 }
 
 /* Hover restores rainbow */
