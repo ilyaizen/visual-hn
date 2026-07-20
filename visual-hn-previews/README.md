@@ -11,8 +11,6 @@ Features:
 - click-to-open lightbox with zoom controls
 - on-site toggle + size control
 
-![Preview](preview.gif)
-
 ## Install
 
 ### Load unpacked
