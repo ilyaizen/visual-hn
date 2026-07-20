@@ -1,19 +1,35 @@
-# Visual-HN
+# visual.hcker.news
 
-Visual-HN is a FastAPI proxy that sits in front of hcker.news, enriches stories with preview images and Open Graph metadata, and exposes the data through a clean API consumed by the [Visual-HN](https://github.com/ilyaizen/visual-hn/tree/main/visual-hn-previews) Chrome extension.
+Visual-HN with preview images/Open Graph metadata, descriptions, zoom, position trends, and more — a FastAPI proxy that enriches [hcker.news](https://hcker.news) (itself a [Hacker News](https://news.ycombinator.com/) clone) stories with Open Graph imagery and metadata, then serves them to a browser extension that overlays the feed.
 
 **Live:** [hn.is-ai-good-yet.com](https://hn.is-ai-good-yet.com)
 
-![Visual-HN screenshot](static/screenshot.png)
+![visual.hcker.news — daily top stories with thumbnails, favicons, descriptions, medals, and trend arrows](static/screenshot.png)
 
 ## Features
 
-- Proxies the hcker.news homepage with preview images injected
-- Fetches Open Graph metadata and resizes images for consistent display
-- Multi-layer anti-scraping pipeline for reliable metadata extraction
-- Exposes story metadata and image assets through the Visual-HN API
-- Tracks story position trends over time
-- Minimal landing page at `/`
+### Proxy & enrichment backend
+
+- ✅ Proxies the hcker.news homepage and injects preview assets into the response
+- ✅ Fetches Open Graph metadata (`og:image`, `og:description`) for every story
+- ✅ Downloads and resizes images to a consistent 16:9 thumbnail (max 640px JPEG)
+- ✅ Multi-layer anti-scraping pipeline: `curl_cffi` TLS fingerprinting → residential headful Chromium → Wayback Machine → screenshot → favicon composite
+- ✅ Tracks each story's position trend over time (rising / falling / steady)
+- ✅ Exposes story metadata and image assets through the Visual-HN API
+- ✅ Async SQLite persistence via SQLAlchemy + aiosqlite
+
+### Browser extension (`visual-hn-previews/`)
+
+- ✅ 16:9 story thumbnail beside every headline
+- ✅ Source favicon before the title
+- ✅ Open Graph / meta description line under the title
+- ✅ Hover preview card
+- ✅ Click-to-open lightbox with zoom controls
+- ✅ On-site toggle + thumbnail size control
+- ✅ Keyboard shortcuts: <kbd>I</kbd> toggles thumbnails, <kbd>Esc</kbd> closes the lightbox
+- ✅ Dedupe-safe and idempotent for infinite scroll and client-side navigation
+- ✅ Gracefully hides missing or broken images
+- ✅ Settings sync via `chrome.storage.sync` and apply live
 
 ## Tech Stack
 
@@ -37,19 +53,35 @@ uvicorn main:app --reload
 
 Open `http://localhost:8000`.
 
+### Browser extension
+
+Load `visual-hn-previews/` unpacked:
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select the `visual-hn-previews/` directory
+5. Open [hcker.news](https://hcker.news/)
+
+See [`visual-hn-previews/README.md`](visual-hn-previews/README.md) for extension settings, keyboard shortcuts, and dev tests.
+
 ## Project Structure
 
-| File                   | Purpose                                       |
-| ---------------------- | --------------------------------------------- |
-| `main.py`              | FastAPI app, routes, lifespan setup           |
-| `hcker_proxy.py`       | hcker.news proxy with preview asset injection |
-| `hn_scraper.py`        | Fetches top stories from the HN Firebase API  |
-| `database.py`          | Async persistence, trend calculation          |
-| `metadata.py`          | Open Graph parsing, image download/resize     |
-| `models.py`            | SQLAlchemy ORM models                         |
-| `templates/`           | Legacy HTML templates                         |
-| `static/`              | CSS, images, favicon                          |
-| `visual-hn-previews/` | Chrome extension for hcker.news               |
+| File                     | Purpose                                       |
+| ------------------------ | --------------------------------------------- |
+| `main.py`                | FastAPI app, routes, lifespan setup           |
+| `hcker_proxy.py`         | hcker.news proxy with preview asset injection |
+| `hn_scraper.py`          | Fetches top stories from the HN Firebase API  |
+| `metadata.py`            | Open Graph parsing, image download/resize     |
+| `database.py`            | Async persistence, trend calculation          |
+| `residential_fetcher.py` | Headful Chromium fallback (residential node)  |
+| `filter_lists.py`        | Content-blocker filter list compilation       |
+| `models.py`              | SQLAlchemy ORM models                         |
+| `templates/`             | Legacy HTML templates                         |
+| `static/`                | CSS, images, favicon                          |
+| `visual-hn-previews/`    | Chrome/Edge extension for hcker.news          |
+| `scripts/`               | Residential-fetcher service + watchdog (Win)  |
+| `docs/`                  | Deployment, node setup, rebrand runbooks      |
 
 ## Contributing
 
