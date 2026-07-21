@@ -6,12 +6,8 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>visual.hcker.news — admin</title>
     <style>
-      :root {
-        color-scheme: dark;
-      }
-      * {
-        box-sizing: border-box;
-      }
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
@@ -20,16 +16,24 @@
         color: #e2e8f0;
         padding: 2rem 1rem;
       }
-      .wrap {
-        max-width: 48rem;
-        margin: 0 auto;
-      }
+      .wrap { max-width: 52rem; margin: 0 auto; }
+
+      /* Header */
       h1 {
         font-size: 1.25rem;
         font-weight: 600;
         margin: 0 0 1.5rem;
         color: #fdba74;
       }
+      .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+      }
+      .actions { display: flex; gap: 0.5rem; }
+
+      /* Cards */
       .card {
         background: #0f172a;
         border: 1px solid #1e293b;
@@ -37,6 +41,16 @@
         padding: 1.25rem 1.5rem;
         margin-bottom: 1rem;
       }
+      .card-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        margin: 0 0 0.75rem;
+      }
+
+      /* Rows */
       .row {
         display: flex;
         justify-content: space-between;
@@ -44,19 +58,16 @@
         padding: 0.35rem 0;
         border-bottom: 1px solid #1e293b;
       }
-      .row:last-child {
-        border-bottom: none;
-      }
-      .label {
-        color: #94a3b8;
-        font-size: 0.85rem;
-      }
+      .row:last-child { border-bottom: none; }
+      .label { color: #94a3b8; font-size: 0.85rem; }
       .value {
         color: #f1f5f9;
         font-size: 0.9rem;
         text-align: right;
         word-break: break-all;
       }
+
+      /* Status dots */
       .dot {
         display: inline-block;
         width: 8px;
@@ -65,15 +76,49 @@
         margin-right: 0.5rem;
         vertical-align: middle;
       }
-      .dot.ok {
-        background: #22c55e;
+      .dot.ok { background: #22c55e; }
+      .dot.bad { background: #ef4444; }
+      .dot.warn { background: #f59e0b; }
+
+      /* Bar chart */
+      .bar-wrap {
+        display: flex;
+        height: 24px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 0.5rem 0;
+        background: #1e293b;
       }
-      .dot.bad {
-        background: #ef4444;
+      .bar-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #020617;
+        transition: width 0.4s ease;
+        min-width: 0;
       }
-      .dot.warn {
-        background: #f59e0b;
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
       }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.75rem;
+        color: #94a3b8;
+      }
+      .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+      }
+
+      /* Auth form */
       input[type="password"] {
         width: 100%;
         padding: 0.6rem 0.75rem;
@@ -96,36 +141,23 @@
         cursor: pointer;
         font-size: 0.85rem;
       }
-      button:hover {
-        background: #fb923c;
-      }
+      button:hover { background: #fb923c; }
       button.secondary {
         background: #1e293b;
         color: #e2e8f0;
       }
-      button.secondary:hover {
-        background: #334155;
-      }
+      button.secondary:hover { background: #334155; }
       .error {
         color: #fca5a5;
         font-size: 0.85rem;
         margin-bottom: 0.75rem;
-      }
-      .top-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-      }
-      .actions {
-        display: flex;
-        gap: 0.5rem;
       }
       .refresh-note {
         color: #64748b;
         font-size: 0.75rem;
         margin-top: 0.5rem;
       }
+      .stale { opacity: 0.5; transition: opacity 0.3s; }
     </style>
   </head>
   <body>
@@ -147,36 +179,36 @@
       </div>
       {% else %}
       <div class="top-bar">
-        <h1>residential node</h1>
+        <h1>visual.hcker.news — admin</h1>
         <div class="actions">
-          <button class="secondary" onclick="pollHealth()">refresh</button>
+          <button class="secondary" onclick="pollStats()">refresh</button>
           <form method="POST" action="/admin/logout" style="display:inline">
             <button class="secondary" type="submit">log out</button>
           </form>
         </div>
       </div>
 
+      <!-- Node Health -->
       <div class="card" id="node-card">
+        <p class="card-title">residential node</p>
         <div class="row">
           <span class="label">status</span>
-          <span class="value" id="status-value">
+          <span class="value" id="node-status">
             <span class="dot {% if node.get('reachable') %}ok{% elif node.get('status') == 'not_configured' %}warn{% else %}bad{% endif %}"></span>
             {{ node.get("status", "unknown") }}
           </span>
         </div>
-
         {% if node.get("reachable") %}
         <div class="row">
-          <span class="label">browser connected</span>
-          <span class="value">{{ node.get("browser_connected", "?") }}</span>
+          <span class="label">browser</span>
+          <span class="value" id="node-browser">
+            <span class="dot {% if node.get('browser_connected') %}ok{% else %}bad{% endif %}"></span>
+            {{ "connected" if node.get("browser_connected") else "disconnected" }}
+          </span>
         </div>
         <div class="row">
           <span class="label">user agent</span>
           <span class="value" style="font-size: 0.78rem">{{ node.get("user_agent", "—") }}</span>
-        </div>
-        <div class="row">
-          <span class="label">profile dir</span>
-          <span class="value" style="font-size: 0.78rem">{{ node.get("profile_dir", "—") }}</span>
         </div>
         <div class="row">
           <span class="label">cf challenge wait</span>
@@ -187,16 +219,22 @@
         {% if lf %}
         <div class="row">
           <span class="label">last fetch</span>
-          <span class="value">{{ lf.get("status", "—") }}</span>
+          <span class="value" id="node-last-fetch-status">{{ lf.get("status", "—") }}</span>
         </div>
         <div class="row">
           <span class="label">last url</span>
-          <span class="value" style="font-size: 0.78rem; max-width: 24rem">{{ lf.get("url") or "—" }}</span>
+          <span class="value" style="font-size: 0.78rem; max-width: 24rem" id="node-last-url">{{ lf.get("url") or "—" }}</span>
         </div>
         {% if lf.get("at") %}
         <div class="row">
           <span class="label">last activity</span>
-          <span class="value" id="last-activity">{{ lf.get("at") }}</span>
+          <span class="value" id="node-last-activity">{{ lf.get("at") }}</span>
+        </div>
+        {% endif %}
+        {% if lf.get("bytes") %}
+        <div class="row">
+          <span class="label">last fetch size</span>
+          <span class="value">{{ (lf.get("bytes", 0) / 1024)|round(0)|int }} KB</span>
         </div>
         {% endif %}
         {% if lf.get("error") %}
@@ -211,10 +249,6 @@
           <span class="label">detail</span>
           <span class="value">{{ node.get("detail", "—") }}</span>
         </div>
-        <div class="row">
-          <span class="label">url</span>
-          <span class="value" style="font-size: 0.78rem">{{ node.get("url", "—") }}</span>
-        </div>
         {% else %}
         <div class="row">
           <span class="label">detail</span>
@@ -222,7 +256,79 @@
         </div>
         {% endif %}
       </div>
-      <div class="refresh-note">auto-refresh every 30s · <a href="#" style="color:#64748b" onclick="pollHealth(); return false">refresh now</a></div>
+
+      <!-- Scraper -->
+      <div class="card" id="scraper-card">
+        <p class="card-title">scraper</p>
+        <div class="row">
+          <span class="label">last cycle</span>
+          <span class="value" id="scraper-last-cycle">
+            {% if scraper and scraper.get("last_cycle_at") %}
+            <span class="dot {% if scraper.get('last_cycle_ok') %}ok{% else %}bad{% endif %}"></span>
+            {{ "ok" if scraper.get("last_cycle_ok") else "error" }}
+            {% else %}
+            <span class="dot warn"></span> no data
+            {% endif %}
+          </span>
+        </div>
+        {% if scraper and scraper.get("last_cycle_at") %}
+        <div class="row">
+          <span class="label">last run</span>
+          <span class="value" id="scraper-last-run">{{ scraper.get("last_cycle_at") }}</span>
+        </div>
+        {% endif %}
+        {% if scraper and scraper.get("stories_scraped") is not none %}
+        <div class="row">
+          <span class="label">stories last cycle</span>
+          <span class="value">{{ scraper.get("stories_scraped") }}</span>
+        </div>
+        {% endif %}
+        <div class="row">
+          <span class="label">interval</span>
+          <span class="value">15 min</span>
+        </div>
+      </div>
+
+      <!-- Database -->
+      <div class="card" id="db-card">
+        <p class="card-title">database</p>
+        {% if db_stats and db_stats.get("error") %}
+        <div class="row">
+          <span class="label">error</span>
+          <span class="value" style="color: #fca5a5">{{ db_stats.get("error") }}</span>
+        </div>
+        {% elif db_stats %}
+        <div class="row">
+          <span class="label">total stories</span>
+          <span class="value" id="db-total">{{ "{:,}".format(db_stats.get("total", 0)) }}</span>
+        </div>
+        <div class="row">
+          <span class="label">on front page</span>
+          <span class="value">{{ "{:,}".format(db_stats.get("on_front", 0)) }}</span>
+        </div>
+
+        <!-- Image distribution bar -->
+        {% set total = db_stats.get("total", 1) or 1 %}
+        {% set og_pct = (db_stats.get("has_og", 0) / total * 100)|round(1) %}
+        {% set ss_pct = (db_stats.get("screenshot", 0) / total * 100)|round(1) %}
+        {% set fav_pct = (db_stats.get("favicon", 0) / total * 100)|round(1) %}
+        {% set ph_pct = (db_stats.get("placeholder", 0) / total * 100)|round(1) %}
+        <div class="bar-wrap" id="db-bar">
+          {% if db_stats.get("has_og") %}<div class="bar-segment" style="background:#3b82f6; width:{{ og_pct }}%">&nbsp;</div>{% endif %}
+          {% if db_stats.get("screenshot") %}<div class="bar-segment" style="background:#8b5cf6; width:{{ ss_pct }}%">&nbsp;</div>{% endif %}
+          {% if db_stats.get("favicon") %}<div class="bar-segment" style="background:#f59e0b; width:{{ fav_pct }}%">&nbsp;</div>{% endif %}
+          {% if db_stats.get("placeholder") %}<div class="bar-segment" style="background:#475569; width:{{ ph_pct }}%">&nbsp;</div>{% endif %}
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch" style="background:#3b82f6"></span> OG image {{ "{:,}".format(db_stats.get("has_og", 0)) }} ({{ og_pct }}%)</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:#8b5cf6"></span> Screenshot {{ "{:,}".format(db_stats.get("screenshot", 0)) }} ({{ ss_pct }}%)</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:#f59e0b"></span> Favicon {{ "{:,}".format(db_stats.get("favicon", 0)) }} ({{ fav_pct }}%)</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:#475569"></span> Placeholder {{ "{:,}".format(db_stats.get("placeholder", 0)) }} ({{ ph_pct }}%)</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="refresh-note">auto-refresh every 30s · <a href="#" style="color:#64748b" onclick="pollStats(); return false">refresh now</a></div>
       {% endif %}
     </div>
 
@@ -232,38 +338,130 @@
         if (!unix) return "—";
         const d = new Date(unix * 1000);
         const diff = Math.floor(Date.now() / 1000 - unix);
+        if (diff < 0) return "just now";
         if (diff < 60) return diff + "s ago";
         if (diff < 3600) return Math.floor(diff / 60) + "m ago";
         if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
         return d.toLocaleString();
       }
 
-      // Render unix timestamps in last-activity on load
+      function fmtBytes(n) {
+        if (!n) return "—";
+        if (n < 1024) return n + " B";
+        if (n < 1048576) return Math.round(n / 1024) + " KB";
+        return (n / 1048576).toFixed(1) + " MB";
+      }
+
+      function fmtNum(n) {
+        return (n || 0).toLocaleString();
+      }
+
+      // Render unix timestamps on load
       (function () {
-        const el = document.getElementById("last-activity");
+        const el = document.getElementById("node-last-activity");
         if (el && el.textContent.trim()) {
           const unix = parseFloat(el.textContent);
           if (!isNaN(unix)) el.textContent = fmtTime(unix);
         }
+        const el2 = document.getElementById("scraper-last-run");
+        if (el2 && el2.textContent.trim()) {
+          const unix = parseFloat(el2.textContent);
+          if (!isNaN(unix)) el2.textContent = fmtTime(unix);
+        }
       })();
 
-      async function pollHealth() {
+      function updateNode(data) {
+        if (!data) return;
+        const card = document.getElementById("node-card");
+        if (!card) return;
+
+        // Status row
+        const statusEl = document.getElementById("node-status");
+        if (statusEl) {
+          const ok = data.reachable;
+          const dotClass = ok ? "ok" : (data.status === "not_configured" ? "warn" : "bad");
+          statusEl.innerHTML = '<span class="dot ' + dotClass + '"></span> ' + (data.status || "unknown");
+        }
+
+        // Browser row
+        const browserEl = document.getElementById("node-browser");
+        if (browserEl) {
+          const connected = data.browser_connected;
+          browserEl.innerHTML = '<span class="dot ' + (connected ? "ok" : "bad") + '"></span> ' +
+            (connected ? "connected" : "disconnected");
+        }
+
+        // Last fetch
+        const lf = data.last_fetch;
+        if (lf) {
+          const fs = document.getElementById("node-last-fetch-status");
+          if (fs) fs.textContent = lf.status || "—";
+          const lu = document.getElementById("node-last-url");
+          if (lu) lu.textContent = lf.url || "—";
+          const la = document.getElementById("node-last-activity");
+          if (la && lf.at) la.textContent = fmtTime(lf.at);
+        }
+      }
+
+      function updateScraper(data) {
+        if (!data) return;
+        const el = document.getElementById("scraper-last-cycle");
+        if (el) {
+          if (data.last_cycle_at) {
+            const ok = data.last_cycle_ok;
+            el.innerHTML = '<span class="dot ' + (ok ? "ok" : "bad") + '"></span> ' +
+              (ok ? "ok" : "error");
+          } else {
+            el.innerHTML = '<span class="dot warn"></span> no data';
+          }
+        }
+        const lr = document.getElementById("scraper-last-run");
+        if (lr && data.last_cycle_at) lr.textContent = fmtTime(data.last_cycle_at);
+      }
+
+      function updateDb(data) {
+        if (!data || data.error) return;
+        const total = data.total || 1;
+
+        // Update total
+        const t = document.getElementById("db-total");
+        if (t) t.textContent = fmtNum(data.total);
+
+        // Rebuild bar
+        const bar = document.getElementById("db-bar");
+        if (!bar) return;
+        const segments = [
+          { val: data.has_og || 0,    color: "#3b82f6", name: "OG image" },
+          { val: data.screenshot || 0, color: "#8b5cf6", name: "Screenshot" },
+          { val: data.favicon || 0,    color: "#f59e0b", name: "Favicon" },
+          { val: data.placeholder || 0, color: "#475569", name: "Placeholder" },
+        ];
+        bar.innerHTML = segments
+          .filter((s) => s.val > 0)
+          .map((s) => {
+            const pct = (s.val / total * 100).toFixed(1);
+            return '<div class="bar-segment" style="background:' + s.color + "; width:" + pct + '%">&nbsp;</div>';
+          })
+          .join("");
+      }
+
+      async function pollStats() {
         try {
-          const r = await fetch("/admin/api/node-health", { cache: "no-store" });
+          const r = await fetch("/admin/api/stats", { cache: "no-store" });
           if (r.status === 401) {
             window.location.reload();
             return;
           }
           const data = await r.json();
-          // Reload to re-render server-side with fresh data. Simpler than
-          // client-side templating for this small dashboard.
-          window.location.reload();
+          updateNode(data.node);
+          updateScraper(data.scraper);
+          updateDb(data.db);
         } catch (e) {
-          console.error(e);
+          console.error("poll failed", e);
         }
       }
 
-      setInterval(pollHealth, 30000);
+      setInterval(pollStats, 30000);
     </script>
     {% endif %}
   </body>

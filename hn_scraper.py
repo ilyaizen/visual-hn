@@ -1,6 +1,7 @@
 # --- START OF FILE hn_scraper.py ---
 import asyncio
 import gc
+import time
 import aiohttp
 from typing import List, Dict, Any
 import logging  # Import logging
@@ -22,6 +23,13 @@ ENABLE_MEMORY_LOGS = os.environ.get("VHN_MEMORY_LOGS", "1").lower() not in {
 
 HACKER_NEWS_TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HACKER_NEWS_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/{}.json"
+
+# Lightweight state for the admin dashboard. Updated at the end of each cycle.
+scraper_status: dict[str, Any] = {
+    "last_cycle_at": None,
+    "last_cycle_ok": None,
+    "stories_scraped": None,
+}
 
 
 def _rss_mb() -> float | None:
@@ -190,6 +198,11 @@ async def start_scraper() -> None:
             logger.info(f"Updating database with {len(processed_stories)} stories...")
             await update_stories(processed_stories)
             logger.info(f"Updated {len(processed_stories)} stories successfully.")
+            scraper_status.update(
+                last_cycle_at=time.time(),
+                last_cycle_ok=True,
+                stories_scraped=len(processed_stories),
+            )
             gc.collect()
             log_memory("cycle-end-after-gc")
 
@@ -199,6 +212,11 @@ async def start_scraper() -> None:
         except Exception as e:
             logger.error(
                 f"An unexpected error occurred in the scraper loop: {e}", exc_info=True
+            )
+            scraper_status.update(
+                last_cycle_at=time.time(),
+                last_cycle_ok=False,
+                stories_scraped=0,
             )
         logger.info("Scraping cycle finished. Sleeping for 15 minutes.")
         await asyncio.sleep(900)  # Sleep for 15 minutes

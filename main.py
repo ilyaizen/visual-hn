@@ -17,8 +17,8 @@ from urllib.request import Request as UrlRequest, urlopen
 import aiohttp
 
 from metadata import favicon_url, source_domain, PLACEHOLDER_IMAGE
-from hn_scraper import start_scraper
-from database import get_stories, get_story_images, init_db
+from hn_scraper import start_scraper, scraper_status
+from database import get_stories, get_story_images, init_db, async_session
 from hcker_proxy import EXTENSION_DIR, register_routes
 
 # Max HN ids accepted per /api/story-images request (bounds query size).
@@ -398,6 +398,39 @@ async def _fetch_node_health() -> dict[str, Any]:
     return result
 
 
+async def _fetch_db_stats() -> dict[str, Any]:
+    """Query DB for story/image distribution stats for the admin dashboard."""
+    from sqlalchemy import text as sa_text
+
+    try:
+        async with async_session() as session:
+            row = (
+                await session.execute(
+                    sa_text(
+                        "SELECT"
+                        "  COUNT(*) as total,"
+                        "  SUM(CASE WHEN og_image_url IS NOT NULL THEN 1 ELSE 0 END) as has_og,"
+                        "  SUM(CASE WHEN image_url LIKE '%placeholder%' THEN 1 ELSE 0 END) as placeholder,"
+                        "  SUM(CASE WHEN image_url LIKE '%fav-%' THEN 1 ELSE 0 END) as favicon,"
+                        "  SUM(CASE WHEN image_url LIKE '%screenshot%' THEN 1 ELSE 0 END) as screenshot,"
+                        "  SUM(CASE WHEN current_position IS NOT NULL THEN 1 ELSE 0 END) as on_front"
+                        " FROM stories"
+                    )
+                )
+            ).one()
+            return {
+                "total": row.total,
+                "has_og": row.has_og,
+                "placeholder": row.placeholder,
+                "favicon": row.favicon,
+                "screenshot": row.screenshot,
+                "on_front": row.on_front,
+            }
+    except Exception as exc:
+        logger.warning("Failed to fetch DB stats: %s", exc)
+        return {"error": str(exc)}
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     if not _admin_password():
@@ -405,10 +438,17 @@ async def admin_page(request: Request):
     if not _is_admin_authorized(request):
         return templates.TemplateResponse(request, "admin.html", {"request": request, "authed": False})
     node = await _fetch_node_health()
+    db_stats = await _fetch_db_stats()
     return templates.TemplateResponse(
         request,
         "admin.html",
-        {"request": request, "authed": True, "node": node},
+        {
+            "request": request,
+            "authed": True,
+            "node": node,
+            "db_stats": db_stats,
+            "scraper": dict(scraper_status),
+        },
     )
 
 
@@ -420,6 +460,24 @@ async def admin_node_health_api(request: Request):
     # Bypass the cache for explicit API polls — the caller controls frequency.
     _node_health_cache["at"] = 0.0
     return JSONResponse(await _fetch_node_health())
+
+
+@app.get("/admin/api/stats")
+async def admin_stats_api(request: Request):
+    """Combined stats for the admin dashboard: node health + DB stats + scraper."""
+    if not _is_admin_authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    _node_health_cache["at"] = 0.0
+    node, db_stats = await asyncio.gather(
+        _fetch_node_health(),
+        _fetch_db_stats(),
+    )
+    return JSONResponse({
+        "node": node,
+        "db": db_stats,
+        "scraper": dict(scraper_status),
+        "server_time": time.time(),
+    })
 
 
 @app.post("/admin/login")
