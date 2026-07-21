@@ -1,16 +1,21 @@
 from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import asyncio
-from typing import AsyncGenerator
+import hashlib
+import secrets
+import time
+from typing import Any, AsyncGenerator
 from datetime import datetime
 import os
 import re
 import logging
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request as UrlRequest, urlopen
+
+import aiohttp
 
 from metadata import favicon_url, source_domain, PLACEHOLDER_IMAGE
 from hn_scraper import start_scraper
@@ -19,6 +24,36 @@ from hcker_proxy import EXTENSION_DIR, register_routes
 
 # Max HN ids accepted per /api/story-images request (bounds query size).
 MAX_IMAGE_IDS = 60
+
+# ── Admin auth ──────────────────────────────────────────────────────────────
+# Password-walled /admin route. Set VHN_ADMIN_PASSWORD env var to enable; if
+# unset, /admin returns 404. Cookie-based session, sha256 of the password,
+# same pattern as is-ai-good-yet's pipeline admin.
+ADMIN_COOKIE_NAME = "vhn_admin"
+ADMIN_SESSION_MAX_AGE = 60 * 60 * 12  # 12h
+
+NODE_HEALTH_CACHE_TTL = 15  # seconds — node health is polled at most this often
+
+
+def _admin_password() -> str | None:
+    pw = os.environ.get("VHN_ADMIN_PASSWORD", "").strip()
+    return pw or None
+
+
+def _admin_cookie_value() -> str | None:
+    pw = _admin_password()
+    return hashlib.sha256(pw.encode()).hexdigest() if pw else None
+
+
+def _is_admin_authorized(request: Request) -> bool:
+    pw = _admin_password()
+    if not pw:
+        return False
+    cookie = request.cookies.get(ADMIN_COOKIE_NAME)
+    if not cookie:
+        return False
+    expected = _admin_cookie_value()
+    return secrets.compare_digest(cookie, expected)
 
 
 # --- Logging Configuration ---
@@ -272,7 +307,124 @@ async def read_legacy_frontend(request: Request):
         "source_domain": source_domain,
         "favicon_url": favicon_url,
     }
-    return templates.TemplateResponse(request, "index.html", context)
+    return templates.TemplateResponse(request, "yahnc.html", context)
+
+
+# ── Admin dashboard ─────────────────────────────────────────────────────────
+
+
+# In-memory cache of the node's /health response. The admin page may be polled
+# by a browser; we don't want every page load to trigger a network round-trip
+# to the residential node.
+_node_health_cache: dict[str, Any] = {"data": None, "at": 0.0}
+
+
+async def _fetch_node_health() -> dict[str, Any]:
+    """Probe the residential node's /health endpoint. Cached for NODE_HEALTH_CACHE_TTL."""
+    node_url = os.environ.get("VHN_RESIDENTIAL_FETCHER_URL", "").rstrip("/")
+    if not node_url:
+        return {
+            "configured": False,
+            "status": "not_configured",
+            "detail": "VHN_RESIDENTIAL_FETCHER_URL not set on the VPS",
+        }
+
+    now = time.time()
+    if (
+        _node_health_cache["data"]
+        and now - _node_health_cache["at"] < NODE_HEALTH_CACHE_TTL
+    ):
+        return _node_health_cache["data"]
+
+    health_url = node_url.replace("/health", "") + "/health"
+    secret = os.environ.get("VHN_RESIDENTIAL_FETCHER_SECRET", "")
+    headers = {"X-Fetcher-Secret": secret} if secret else {}
+    result: dict[str, Any] = {
+        "configured": True,
+        "url": health_url,
+        "checked_at": now,
+    }
+    try:
+        timeout = aiohttp.ClientTimeout(total=8)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(health_url, headers=headers) as resp:
+                if resp.status == 200:
+                    body = await resp.json()
+                    result.update(body)
+                    result["reachable"] = True
+                    # Normalize: 'ok' from node means node-healthy
+                    result["status"] = body.get("status", "ok")
+                else:
+                    result["reachable"] = False
+                    result["status"] = "http_error"
+                    result["detail"] = f"node returned HTTP {resp.status}"
+    except asyncio.TimeoutError:
+        result["reachable"] = False
+        result["status"] = "timeout"
+        result["detail"] = "node did not respond in 8s (laptop may be asleep)"
+    except Exception as exc:
+        result["reachable"] = False
+        result["status"] = "unreachable"
+        result["detail"] = f"{type(exc).__name__}: {exc}"
+
+    _node_health_cache["data"] = result
+    _node_health_cache["at"] = now
+    return result
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    if not _admin_password():
+        return HTMLResponse("Not Found", status_code=404)
+    if not _is_admin_authorized(request):
+        return templates.TemplateResponse(request, "admin.html", {"request": request, "authed": False})
+    node = await _fetch_node_health()
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {"request": request, "authed": True, "node": node},
+    )
+
+
+@app.get("/admin/api/node-health")
+async def admin_node_health_api(request: Request):
+    """JSON endpoint for the admin page to poll node health without full reload."""
+    if not _is_admin_authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    # Bypass the cache for explicit API polls — the caller controls frequency.
+    _node_health_cache["at"] = 0.0
+    return JSONResponse(await _fetch_node_health())
+
+
+@app.post("/admin/login")
+async def admin_login(request: Request):
+    if not _admin_password():
+        return HTMLResponse("Not Found", status_code=404)
+    form = await request.form()
+    password = form.get("password", "")
+    if password == _admin_password():
+        resp = RedirectResponse(url="/admin", status_code=303)
+        resp.set_cookie(
+            ADMIN_COOKIE_NAME,
+            _admin_cookie_value(),
+            max_age=ADMIN_SESSION_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+        )
+        return resp
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {"request": request, "authed": False, "error": "Wrong password"},
+    )
+
+
+@app.post("/admin/logout")
+async def admin_logout(request: Request):
+    resp = RedirectResponse(url="/admin", status_code=303)
+    resp.delete_cookie(ADMIN_COOKIE_NAME)
+    return resp
 
 
 if __name__ == "__main__":

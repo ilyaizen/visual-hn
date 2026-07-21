@@ -43,8 +43,23 @@ $env:RESIDENTIAL_FETCHER_SECRET = "your-secret-here"
 python residential_fetcher.py
 ```
 
-A Chromium window will open — that's normal. It's the headful browser that
-solves Cloudflare challenges. Keep it running.
+A Chromium window opens and **stays open** — that's by design. It's a
+persistent headful browser profile: one window, one tab, cookies (including
+`cf_clearance`) preserved across requests. When Cloudflare throws a challenge
+the browser can't auto-solve, the tab stays on the challenge page for up to
+180 seconds so you can click the checkbox or solve the captcha manually. Keep
+the fetcher running.
+
+The browser profile lives at `.browser-profile/` next to the script (override
+with `RESIDENTIAL_FETCHER_PROFILE`). It persists cookies and localStorage
+between restarts.
+
+| Env var                          | Default                  | Purpose                                        |
+| -------------------------------- | ------------------------ | ---------------------------------------------- |
+| `RESIDENTIAL_FETCHER_PORT`       | `8765`                   | Port to listen on                              |
+| `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_             | Shared secret matching the VPS                 |
+| `CF_CHALLENGE_MAX_WAIT`          | `180`                    | Seconds to leave a CF challenge open for human |
+| `RESIDENTIAL_FETCHER_PROFILE`    | `.browser-profile/`      | Chromium user-data dir (cookie persistence)    |
 
 ## Auto-start on login + watchdog (Task Scheduler)
 

@@ -346,14 +346,14 @@ def test_is_public_http_url_rejects_private_and_local_targets():
 
 
 def test_template_uses_wide_two_column_grid():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
 
     assert "max-w-7xl" in template
     assert "lg:grid-cols-2" in template
 
 
 def test_template_story_title_is_linked_hover_only_and_typographically_balanced():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
 
     assert 'target="_blank"' in template
     assert "no-underline" in template
@@ -370,7 +370,7 @@ def test_template_story_title_is_linked_hover_only_and_typographically_balanced(
 
 
 def test_story_image_hover_group_underlines_story_title():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
 
     assert "story-image-link" in template
     assert ".story-card:has(.story-image-link:hover) .story-title" in template
@@ -378,7 +378,7 @@ def test_story_image_hover_group_underlines_story_title():
 
 
 def test_template_renders_favicon_before_title_and_muted_domain_after_title():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
 
     favicon_idx = template.index("story-favicon")
     title_idx = template.index("{{ story.title }}", favicon_idx)
@@ -402,7 +402,7 @@ def test_template_renders_favicon_before_title_and_muted_domain_after_title():
 
 
 def test_template_never_truncates_story_titles():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
     title_start = template.index("<h2 class=")
     title_end = template.index("</h2>", title_start)
     title_markup = template[title_start:title_end]
@@ -412,7 +412,7 @@ def test_template_never_truncates_story_titles():
 
 
 def test_background_uses_organic_floating_ambient_blobs():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
     css = Path("static/css/input.css").read_text(encoding="utf-8")
 
     assert "ambient-background" in template
@@ -437,7 +437,7 @@ def test_story_image_css_restores_zoom_and_blend_effects():
 
 
 def test_template_place_badges_use_emojis_and_prioritize_points_and_comments():
-    template = Path("templates/index.html").read_text(encoding="utf-8")
+    template = Path("templates/yahnc.html").read_text(encoding="utf-8")
 
     assert "🥇" in template
     assert "🥈" in template
