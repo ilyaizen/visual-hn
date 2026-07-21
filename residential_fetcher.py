@@ -278,18 +278,52 @@ def _start_background_guard() -> None:
     logger.info("Background guard started — Chrome windows will not steal focus")
 
 
+def _browser_is_alive() -> bool:
+    """True if the browser process is still connected and the page is usable."""
+    if not (_context and _page and not _page.is_closed()):
+        return False
+    browser = _context.browser
+    return bool(browser and browser.is_connected())
+
+
+async def _teardown_browser() -> None:
+    """Tear down dead browser state so a fresh launch can proceed."""
+    global _context, _pw, _page
+    if _context:
+        try:
+            await _context.close()
+        except Exception:
+            pass
+    if _pw:
+        try:
+            await _pw.stop()
+        except Exception:
+            pass
+    _context = None
+    _pw = None
+    _page = None
+
+
 async def _ensure_browser() -> tuple[Any, Any]:
     """Launch the persistent context once. Returns (context, page).
 
     The same window and tab are reused for every subsequent request. Cookies,
     localStorage, and cf_clearance persist in PROFILE_DIR across restarts.
+    Auto-relaunches if the browser process has crashed or disconnected.
     """
     global _context, _pw, _page
-    if _context and _page and not _page.is_closed():
+    if _browser_is_alive():
         return _context, _page
     async with _lock:
-        if _context and _page and not _page.is_closed():
+        if _browser_is_alive():
             return _context, _page
+        if _context or _pw:
+            logger.warning(
+                "Browser disconnected (page_closed=%s, browser_connected=%s) — relaunching",
+                _page.is_closed() if _page else "no_page",
+                _context.browser.is_connected() if _context and _context.browser else "no_browser",
+            )
+            await _teardown_browser()
         from playwright.async_api import async_playwright
 
         PROFILE_DIR.mkdir(parents=True, exist_ok=True)
@@ -428,9 +462,7 @@ async def health():
     consistency is verified once at startup via the profile's actual Chrome
     build, not re-probed on every /health call.
     """
-    browser_connected = bool(
-        _context and _context.browser and _context.browser.is_connected()
-    )
+    browser_connected = _browser_is_alive()
     return {
         "status": "ok" if browser_connected else "degraded",
         "browser_connected": browser_connected,
