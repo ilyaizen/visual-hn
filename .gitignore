@@ -25,3 +25,6 @@ watchdog-sim.log
 # Internal docs (IPs, secrets, topology) — synced via HyperVault, not committed
 docs_internal/
 /.zcode
+
+# Persistent Chromium profile (created by residential_fetcher.py)
+/.browser-profile
