@@ -4,7 +4,6 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import asyncio
-import hashlib
 import secrets
 import time
 from typing import Any, AsyncGenerator
@@ -27,22 +26,26 @@ MAX_IMAGE_IDS = 60
 
 # ── Admin auth ──────────────────────────────────────────────────────────────
 # Password-walled /admin route. Set VHN_ADMIN_PASSWORD env var to enable; if
-# unset, /admin returns 404. Cookie-based session, sha256 of the password,
-# same pattern as is-ai-good-yet's pipeline admin.
+# unset, /admin returns 404. Sessions use random tokens (secrets.token_hex)
+# stored in-memory, so cookie theft does not reveal the password hash and
+# sessions can be invalidated by restarting the process.
 ADMIN_COOKIE_NAME = "vhn_admin"
-ADMIN_SESSION_MAX_AGE = 60 * 60 * 12  # 12h
+ADMIN_SESSION_MAX_AGE = 60 * 60 * 8  # 8h
+ADMIN_LOGIN_MAX_ATTEMPTS = 5
+ADMIN_LOGIN_WINDOW_S = 300  # 5 min window for rate-limiting
 
 NODE_HEALTH_CACHE_TTL = 15  # seconds — node health is polled at most this often
+
+# In-memory session store: token → expiry timestamp. Cleared on restart.
+_admin_sessions: dict[str, float] = {}
+
+# Brute-force protection: (IP → list of attempt timestamps).
+_admin_login_attempts: dict[str, list[float]] = {}
 
 
 def _admin_password() -> str | None:
     pw = os.environ.get("VHN_ADMIN_PASSWORD", "").strip()
     return pw or None
-
-
-def _admin_cookie_value() -> str | None:
-    pw = _admin_password()
-    return hashlib.sha256(pw.encode()).hexdigest() if pw else None
 
 
 def _is_admin_authorized(request: Request) -> bool:
@@ -52,8 +55,31 @@ def _is_admin_authorized(request: Request) -> bool:
     cookie = request.cookies.get(ADMIN_COOKIE_NAME)
     if not cookie:
         return False
-    expected = _admin_cookie_value()
-    return secrets.compare_digest(cookie, expected)
+    expiry = _admin_sessions.get(cookie)
+    if expiry is None:
+        return False
+    if time.time() > expiry:
+        _admin_sessions.pop(cookie, None)
+        return False
+    return True
+
+
+def _admin_client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _admin_rate_limited(ip: str) -> bool:
+    """Return True if IP has exceeded ADMIN_LOGIN_MAX_ATTEMPTS in the window."""
+    now = time.time()
+    attempts = _admin_login_attempts.get(ip, [])
+    # Prune old entries.
+    attempts = [t for t in attempts if now - t < ADMIN_LOGIN_WINDOW_S]
+    _admin_login_attempts[ip] = attempts
+    return len(attempts) >= ADMIN_LOGIN_MAX_ATTEMPTS
+
+
+def _admin_record_attempt(ip: str) -> None:
+    _admin_login_attempts.setdefault(ip, []).append(time.time())
 
 
 # --- Logging Configuration ---
@@ -400,19 +426,31 @@ async def admin_node_health_api(request: Request):
 async def admin_login(request: Request):
     if not _admin_password():
         return HTMLResponse("Not Found", status_code=404)
+    ip = _admin_client_ip(request)
+    if _admin_rate_limited(ip):
+        return templates.TemplateResponse(
+            request,
+            "admin.html",
+            {"request": request, "authed": False, "error": "Too many attempts. Wait a few minutes."},
+            status_code=429,
+        )
     form = await request.form()
-    password = form.get("password", "")
-    if password == _admin_password():
+    password = str(form.get("password", ""))
+    expected_pw = _admin_password() or ""
+    if secrets.compare_digest(password, expected_pw):
+        token = secrets.token_hex(32)
+        _admin_sessions[token] = time.time() + ADMIN_SESSION_MAX_AGE
         resp = RedirectResponse(url="/admin", status_code=303)
         resp.set_cookie(
             ADMIN_COOKIE_NAME,
-            _admin_cookie_value(),
+            token,
             max_age=ADMIN_SESSION_MAX_AGE,
             httponly=True,
-            samesite="lax",
+            samesite="strict",
             secure=request.url.scheme == "https",
         )
         return resp
+    _admin_record_attempt(ip)
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -422,6 +460,9 @@ async def admin_login(request: Request):
 
 @app.post("/admin/logout")
 async def admin_logout(request: Request):
+    cookie = request.cookies.get(ADMIN_COOKIE_NAME)
+    if cookie:
+        _admin_sessions.pop(cookie, None)
     resp = RedirectResponse(url="/admin", status_code=303)
     resp.delete_cookie(ADMIN_COOKIE_NAME)
     return resp
