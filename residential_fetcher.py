@@ -141,27 +141,16 @@ if BACKGROUND_GUARD_ENABLED:
     SWP_NOMOVE = 0x0002
     SWP_NOSIZE = 0x0001
     TH32CS_SNAPPROCESS = 0x00000002
-    MAX_PATH = 260
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
-    class _PROCESSENTRY32W(ctypes.Structure):
-        _fields_ = [
-            ("dwSize", wintypes.DWORD),
-            ("cntUsage", wintypes.DWORD),
-            ("th32ProcessID", wintypes.DWORD),
-            # Both are ULONG_PTR in the Windows SDK — 8 bytes on Win64,
-            # 4 on Win32. Must use a pointer-sized type or the struct
-            # layout diverges and th32ParentProcessID reads garbage.
-            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
-            ("th32ModuleID", ctypes.POINTER(ctypes.c_ulong)),
-            ("cntThreads", wintypes.DWORD),
-            ("th32ParentProcessID", wintypes.DWORD),
-            ("pcPriClassBase", ctypes.c_long),
-            ("dwFlags", wintypes.DWORD),
-            ("szExeFile", ctypes.c_wchar * MAX_PATH),
-        ]
+    # NOTE: PROCESSENTRY32W is NOT defined as a ctypes Structure here.
+    # On Win64, ctypes struct marshaling through POINTER(Structure) argtypes
+    # silently corrupts the th32ParentProcessID field (reads 0 or garbage),
+    # which breaks the descendant PID walk and makes the guard miss Chrome.
+    # Using a raw byte buffer + struct.unpack is immune to this.
+    _ENTRY_SIZE = 568  # sizeof(PROCESSENTRY32W) on Win64
 
     user32.GetWindowLongW.restype = ctypes.c_long
     user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -188,25 +177,28 @@ if BACKGROUND_GUARD_ENABLED:
 
     def _descendant_pids(root_pid: int) -> set[int]:
         """Return root_pid + all descendants using a toolhelp snapshot."""
+        import struct as _struct
+
         snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
         # INVALID_HANDLE_VALUE is -1 cast to HANDLE (void*). On Win64 the
         # ctypes default c_int return gives -1 as a Python int; compare directly.
         if snap == -1 or snap == ctypes.c_void_p(-1).value:
             return {root_pid}
         try:
-            entries: list[_PROCESSENTRY32W] = []
-            pe = _PROCESSENTRY32W()
-            pe.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
-            if kernel32.Process32FirstW(snap, ctypes.byref(pe)):
-                while True:
-                    entries.append(pe)
-                    pe = _PROCESSENTRY32W()
-                    pe.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
-                    if not kernel32.Process32NextW(snap, ctypes.byref(pe)):
-                        break
+            buf = (ctypes.c_byte * _ENTRY_SIZE)()
+            ctypes.cast(buf, ctypes.POINTER(wintypes.DWORD))[0] = _ENTRY_SIZE
             by_parent: dict[int, list[int]] = {}
-            for e in entries:
-                by_parent.setdefault(e.th32ParentProcessID, []).append(e.th32ProcessID)
+            if kernel32.Process32FirstW(snap, buf):
+                while True:
+                    raw = bytes(buf)
+                    pid = _struct.unpack_from("<I", raw, 8)[0]
+                    ppid = _struct.unpack_from("<I", raw, 32)[0]
+                    by_parent.setdefault(ppid, []).append(pid)
+                    for i in range(_ENTRY_SIZE):
+                        buf[i] = 0
+                    ctypes.cast(buf, ctypes.POINTER(wintypes.DWORD))[0] = _ENTRY_SIZE
+                    if not kernel32.Process32NextW(snap, buf):
+                        break
             found: set[int] = set()
             stack = [root_pid]
             while stack:
