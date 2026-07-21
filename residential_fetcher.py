@@ -31,6 +31,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -74,6 +76,13 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 )
 
+# Background-foreground guard. Headful Chrome steals focus on launch and on
+# every navigation that triggers a renderer swap (Cloudflare reloads do this).
+# We keep the windows runnable (JS executes, CF challenges resolve) but strip
+# their right to ever enter the foreground via WS_EX_NOACTIVATE + Z-order floor.
+BACKGROUND_GUARD_ENABLED = sys.platform == "win32"
+BACKGROUND_GUARD_INTERVAL_S = 2.0
+
 # Persistent context: one window, one profile, reused for every request.
 _context: Any = None
 _pw: Any = None
@@ -103,6 +112,175 @@ class FetchResult(BaseModel):
     error: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# Background guard (Windows only)
+# ---------------------------------------------------------------------------
+# Headful Chrome windows steal focus on launch and every renderer swap (which
+# Cloudflare challenges trigger). We identify the Chromium processes spawned by
+# this Python (via CreateToolhelp32Snapshot — no psutil dependency), then for
+# each of their top-level windows we:
+#   1. Add WS_EX_NOACTIVATE so clicks/focus requests are permanently ignored.
+#   2. Force HWND_BOTTOM Z-order with SWP_NOACTIVATE so they render behind all
+#      normal windows. JS still executes, CF challenges still resolve, but the
+#      windows never enter the foreground or disrupt the user.
+# Cross-platform: the worker is a no-op when BACKGROUND_GUARD_ENABLED is False
+# (e.g. running this file on the Ubuntu VPS for tests), so no OS branching is
+# needed at call sites.
+_guard_stop: threading.Event | None = None
+_guard_thread: threading.Thread | None = None
+
+if BACKGROUND_GUARD_ENABLED:
+    import ctypes
+    from ctypes import wintypes
+
+    GWL_EXSTYLE = -20
+    WS_EX_NOACTIVATE = 0x08000000
+    WS_EX_APPWINDOW = 0x00040000
+    HWND_BOTTOM = 1
+    SWP_NOACTIVATE = 0x0010
+    SWP_NOMOVE = 0x0002
+    SWP_NOSIZE = 0x0001
+    TH32CS_SNAPPROCESS = 0x00000002
+    MAX_PATH = 260
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    class _PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", ctypes.c_wchar * MAX_PATH),
+        ]
+
+    user32.GetWindowLongW.restype = ctypes.c_long
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetWindowLongW.restype = ctypes.c_long
+    user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
+    user32.SetWindowPos.restype = wintypes.BOOL
+    user32.SetWindowPos.argtypes = [
+        wintypes.HWND,
+        wintypes.HWND,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        wintypes.UINT,
+    ]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetWindowThreadProcessId.argtypes = [
+        wintypes.HWND,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    _ENUM_PROC_TYPE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.restype = wintypes.BOOL
+    user32.EnumWindows.argtypes = [_ENUM_PROC_TYPE, wintypes.LPARAM]
+
+    def _descendant_pids(root_pid: int) -> set[int]:
+        """Return root_pid + all descendants using a toolhelp snapshot."""
+        snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snap == ctypes.c_void_p(-1).value:
+            return {root_pid}
+        try:
+            entries: list[_PROCESSENTRY32W] = []
+            pe = _PROCESSENTRY32W()
+            pe.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+            if kernel32.Process32FirstW(snap, ctypes.byref(pe)):
+                while True:
+                    entries.append(pe)
+                    pe = _PROCESSENTRY32W()
+                    pe.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+                    if not kernel32.Process32NextW(snap, ctypes.byref(pe)):
+                        break
+            by_parent: dict[int, list[int]] = {}
+            for e in entries:
+                by_parent.setdefault(e.th32ParentProcessID, []).append(e.th32ProcessID)
+            found: set[int] = set()
+            stack = [root_pid]
+            while stack:
+                pid = stack.pop()
+                if pid in found:
+                    continue
+                found.add(pid)
+                stack.extend(by_parent.get(pid, []))
+            return found
+        finally:
+            kernel32.CloseHandle(snap)
+
+    def _apply_no_activate(hwnd: int, _lparam: int) -> bool:
+        """EnumWindowsProc: strip activation rights from a top-level window."""
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value not in _guard_target_pids:
+            return True
+        ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        if not (ex & WS_EX_NOACTIVATE):
+            user32.SetWindowLongW(
+                hwnd, GWL_EXSTYLE, (ex | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW
+            )
+        user32.SetWindowPos(
+            hwnd,
+            HWND_BOTTOM,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+        )
+        return True
+
+    # Hold the target PID set in a module-level so the C callback can read it.
+    _guard_target_pids: set[int] = set()
+    # Instantiate the C callback wrapper after _apply_no_activate is defined.
+    _enum_proc = _ENUM_PROC_TYPE(_apply_no_activate)
+
+    def _background_guard_loop(stop: threading.Event) -> None:
+        """Periodically re-assert no-activate on our Chromium windows."""
+        own_pid = os.getpid()
+        while not stop.wait(BACKGROUND_GUARD_INTERVAL_S):
+            global _guard_target_pids
+            _guard_target_pids = _descendant_pids(own_pid)
+            if not _guard_target_pids:
+                continue
+            try:
+                user32.EnumWindows(_enum_proc, 0)
+            except Exception as exc:
+                logger.debug("background guard enum failed: %s", exc)
+
+else:
+    # Non-Windows hosts (VPS tests, CI): guard is inert.
+    def _descendant_pids(root_pid: int) -> set[int]:
+        return set()
+
+    def _background_guard_loop(stop: threading.Event) -> None:
+        stop.wait()
+
+
+def _start_background_guard() -> None:
+    """Launch the no-activate enforcer thread. Safe to call on any OS."""
+    global _guard_stop, _guard_thread
+    if not BACKGROUND_GUARD_ENABLED:
+        return
+    if _guard_thread and _guard_thread.is_alive():
+        return
+    _guard_stop = threading.Event()
+    _guard_thread = threading.Thread(
+        target=_background_guard_loop,
+        args=(_guard_stop,),
+        name="VHN-BackgroundGuard",
+        daemon=True,
+    )
+    _guard_thread.start()
+    logger.info("Background guard started — Chrome windows will not steal focus")
+
+
 async def _ensure_browser() -> tuple[Any, Any]:
     """Launch the persistent context once. Returns (context, page).
 
@@ -129,8 +307,14 @@ async def _ensure_browser() -> tuple[Any, Any]:
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-first-run",
+                # Spawn off-screen so the first paint never lands on the desktop.
+                "--window-position=-2400,-2400",
+                "--window-size=1280,900",
             ],
         )
+        # Start the background guard immediately so no-activate is applied
+        # before any navigation can trigger a focus-stealing renderer swap.
+        _start_background_guard()
         # Hide webdriver flag for extra stealth.
         await _context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
@@ -141,9 +325,7 @@ async def _ensure_browser() -> tuple[Any, Any]:
             _page = _context.pages[0]
         else:
             _page = await _context.new_page()
-        logger.info(
-            "Persistent browser launched (headful, profile=%s)", PROFILE_DIR
-        )
+        logger.info("Persistent browser launched (headful, profile=%s)", PROFILE_DIR)
         return _context, _page
 
 
@@ -163,14 +345,10 @@ async def _fetch_with_browser(url: str) -> FetchResult:
         # resolving (token fetch, JS exec, redirect). networkidle fires when
         # no requests for 500ms, which reliably catches challenge completion.
         try:
-            await page.wait_for_load_state(
-                "networkidle", timeout=NETWORK_IDLE_MS
-            )
+            await page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_MS)
             logger.info("Network idle for %s", url)
         except Exception:
-            logger.info(
-                "Network idle timeout for %s (may have continuous pings)", url
-            )
+            logger.info("Network idle timeout for %s (may have continuous pings)", url)
 
         # Secondary check: if title still shows CF challenge, WAIT. The window
         # is already open and visible — a human at the laptop can click the
@@ -233,6 +411,8 @@ async def lifespan(app: FastAPI):
         CF_CHALLENGE_MAX_WAIT,
     )
     yield
+    if _guard_stop:
+        _guard_stop.set()
     if _context:
         await _context.close()
     if _pw:
@@ -251,7 +431,9 @@ async def health():
     consistency is verified once at startup via the profile's actual Chrome
     build, not re-probed on every /health call.
     """
-    browser_connected = bool(_context and _context.browser and _context.browser.is_connected())
+    browser_connected = bool(
+        _context and _context.browser and _context.browser.is_connected()
+    )
     return {
         "status": "ok" if browser_connected else "degraded",
         "browser_connected": browser_connected,
