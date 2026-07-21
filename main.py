@@ -480,6 +480,41 @@ async def admin_stats_api(request: Request):
     })
 
 
+@app.get("/admin/api/recent-screenshots")
+async def admin_recent_screenshots(request: Request):
+    """Latest screenshots for the admin gallery — visual health check."""
+    if not _is_admin_authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    from sqlalchemy import text as sa_text
+
+    try:
+        async with async_session() as session:
+            rows = (
+                await session.execute(
+                    sa_text(
+                        "SELECT image_url, url, title, id"
+                        " FROM stories"
+                        " WHERE image_url LIKE '%screenshot%'"
+                        " ORDER BY id DESC LIMIT 12"
+                    )
+                )
+            ).all()
+            return {
+                "screenshots": [
+                    {
+                        "image": r.image_url,
+                        "url": r.url,
+                        "title": (r.title or "")[:80],
+                        "hn_id": r.id,
+                    }
+                    for r in rows
+                ]
+            }
+    except Exception as exc:
+        logger.warning("Failed to fetch recent screenshots: %s", exc)
+        return {"screenshots": [], "error": str(exc)}
+
+
 @app.post("/admin/login")
 async def admin_login(request: Request):
     if not _admin_password():

@@ -329,6 +329,14 @@
       </div>
 
       <div class="refresh-note">auto-refresh every 30s · <a href="#" style="color:#64748b" onclick="pollStats(); return false">refresh now</a></div>
+
+      <!-- Screenshot Gallery -->
+      <div class="card" style="margin-top: 1rem;">
+        <p class="card-title">recent screenshots</p>
+        <div id="screenshot-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem;">
+          <p style="color: #64748b; font-size: 0.8rem;">loading...</p>
+        </div>
+      </div>
       {% endif %}
     </div>
 
@@ -459,9 +467,36 @@
         } catch (e) {
           console.error("poll failed", e);
         }
+        pollScreenshots();
+      }
+
+      async function pollScreenshots() {
+        try {
+          const r = await fetch("/admin/api/recent-screenshots", { cache: "no-store" });
+          if (r.status === 401) return;
+          const data = await r.json();
+          const grid = document.getElementById("screenshot-grid");
+          if (!grid) return;
+          if (!data.screenshots || data.screenshots.length === 0) {
+            grid.innerHTML = '<p style="color: #64748b; font-size: 0.8rem;">no screenshots yet</p>';
+            return;
+          }
+          grid.innerHTML = data.screenshots.map(function (s) {
+            return '<a href="' + s.url + '" target="_blank" rel="noopener" style="text-decoration:none">' +
+              '<div style="position: relative; border: 1px solid #1e293b; border-radius: 4px; overflow: hidden; aspect-ratio: 4/3; background: #1e293b;">' +
+              '<img src="' + s.image + '" loading="lazy" style="width:100%; height:100%; object-fit:cover;" alt="' + s.title + '" ' +
+              'onerror="this.parentElement.style.opacity=0.3; this.alt=\'failed\'" />' +
+              '</div>' +
+              '<p style="margin: 0.3rem 0 0; font-size: 0.7rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' +
+              s.title + '</p></a>';
+          }).join("");
+        } catch (e) {
+          console.error("screenshot poll failed", e);
+        }
       }
 
       setInterval(pollStats, 30000);
+      pollScreenshots();
     </script>
     {% endif %}
   </body>
