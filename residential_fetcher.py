@@ -151,8 +151,11 @@ if BACKGROUND_GUARD_ENABLED:
             ("dwSize", wintypes.DWORD),
             ("cntUsage", wintypes.DWORD),
             ("th32ProcessID", wintypes.DWORD),
+            # Both are ULONG_PTR in the Windows SDK — 8 bytes on Win64,
+            # 4 on Win32. Must use a pointer-sized type or the struct
+            # layout diverges and th32ParentProcessID reads garbage.
             ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
-            ("th32ModuleID", wintypes.DWORD),
+            ("th32ModuleID", ctypes.POINTER(ctypes.c_ulong)),
             ("cntThreads", wintypes.DWORD),
             ("th32ParentProcessID", wintypes.DWORD),
             ("pcPriClassBase", ctypes.c_long),
@@ -186,7 +189,9 @@ if BACKGROUND_GUARD_ENABLED:
     def _descendant_pids(root_pid: int) -> set[int]:
         """Return root_pid + all descendants using a toolhelp snapshot."""
         snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-        if snap == ctypes.c_void_p(-1).value:
+        # INVALID_HANDLE_VALUE is -1 cast to HANDLE (void*). On Win64 the
+        # ctypes default c_int return gives -1 as a Python int; compare directly.
+        if snap == -1 or snap == ctypes.c_void_p(-1).value:
             return {root_pid}
         try:
             entries: list[_PROCESSENTRY32W] = []
