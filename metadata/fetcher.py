@@ -10,6 +10,8 @@ import logging
 import os
 import time
 from contextlib import suppress
+from dataclasses import dataclass, field
+from enum import Enum
 from ssl import SSLError
 from typing import Any
 
@@ -21,6 +23,34 @@ import screenshot as screenshot_module
 from .safety import is_public_http_url
 
 logger = logging.getLogger(__name__)
+
+
+class FetchFailure(str, Enum):
+    """Typed failure reasons for HTML fetch operations."""
+
+    BLOCKED = "blocked"  # 401/403/429/503 — anti-bot
+    TIMEOUT = "timeout"
+    DNS = "dns"
+    NON_HTML = "non_html"
+    TOO_LARGE = "too_large"
+    EMPTY = "empty"
+    UNSAFE_URL = "unsafe_url"
+    NETWORK = "network"
+
+
+@dataclass(frozen=True)
+class HtmlFetchResult:
+    """Structured result from an HTML fetch attempt."""
+
+    html: str | None = None
+    final_url: str | None = None
+    failure: FetchFailure | None = None
+    detail: str | None = None
+
+    @property
+    def succeeded(self) -> bool:
+        return self.html is not None and self.failure is None
+
 
 # Must match curl_cffi's impersonate='chrome' default UA (Chrome 146 macOS).
 # Overriding to a different OS/version creates contradictions with the TLS

@@ -60,6 +60,8 @@ from .fetcher import (
     _wayback_fetch_html,
     capture_screenshot_with_timeout,
     capture_screenshot,
+    FetchFailure,
+    HtmlFetchResult,
 )
 
 # ── images ──
