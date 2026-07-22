@@ -8,6 +8,11 @@
 
 ## One-time setup
 
+**Prerequisite:** Google Chrome must be installed in the default location
+(`C:\Program Files\Google\Chrome\Application\chrome.exe`). Unlike the old
+Playwright setup which downloaded a bundled Chromium, nodriver drives the
+**real system Chrome** — this is core to its anti-detection capability.
+
 ```powershell
 cd D:\GitHub\visual-hn
 
@@ -15,12 +20,11 @@ cd D:\GitHub\visual-hn
 python -m venv .node-venv
 .\.node-venv\Scripts\Activate.ps1
 
-# Install dependencies
-pip install fastapi uvicorn playwright
-
-# Install Chromium binary for Playwright
-python -m playwright install chromium
+# Install dependencies (nodriver replaces playwright + the Win32 ctypes stack)
+pip install fastapi uvicorn nodriver
 ```
+
+No `playwright install chromium` step — nodriver uses the system Chrome binary.
 
 If you get a PowerShell execution policy error when activating the venv:
 
@@ -43,12 +47,17 @@ $env:RESIDENTIAL_FETCHER_SECRET = "your-secret-here"
 python residential_fetcher.py
 ```
 
-A Chromium window opens and **stays open** — that's by design. It's a
-persistent headful browser profile: one window, one tab, cookies (including
-`cf_clearance`) preserved across requests. When Cloudflare throws a challenge
-the browser can't auto-solve, the tab stays on the challenge page for up to
-180 seconds so you can click the checkbox or solve the captcha manually. Keep
-the fetcher running.
+The browser runs **headless** — no visible window, no taskbar button, no focus
+stealing. It uses [nodriver](https://github.com/ultrafunkamsterdam/nodriver)
+(undetected-chromedriver successor) to drive the real system Chrome via CDP,
+which auto-passes most Cloudflare managed challenges. Cookies (including
+`cf_clearance`) are preserved in the profile across restarts.
+
+When Cloudflare throws an interactive challenge that nodriver can't auto-solve,
+the fetcher tries to find and click the "verify you are human" checkbox
+programmatically (nodriver's `find()` searches iframes). If it doesn't resolve
+within `CF_CHALLENGE_MAX_WAIT` seconds, the fetch returns an error and the VPS
+falls through to Wayback → screenshot → favicon composite.
 
 The browser profile lives at `.browser-profile/` next to the script (override
 with `RESIDENTIAL_FETCHER_PROFILE`). It persists cookies and localStorage
@@ -58,7 +67,7 @@ between restarts.
 | -------------------------------- | ------------------------ | ---------------------------------------------- |
 | `RESIDENTIAL_FETCHER_PORT`       | `8765`                   | Port to listen on                              |
 | `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_             | Shared secret matching the VPS                 |
-| `CF_CHALLENGE_MAX_WAIT`          | `180`                    | Seconds to leave a CF challenge open for human |
+| `CF_CHALLENGE_MAX_WAIT`          | `60`                     | Seconds to wait for headless CF auto-solve   |
 | `RESIDENTIAL_FETCHER_PROFILE`    | `.browser-profile/`      | Chromium user-data dir (cookie persistence)    |
 
 ## Auto-start on login + watchdog (Task Scheduler)

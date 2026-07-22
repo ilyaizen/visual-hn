@@ -16,10 +16,10 @@ This project runs across **two machines**. Code runs in both places; commands ar
 | **Hostname** | *(see internal docs)*                                     | *(see internal docs)*                                                                                 |
 | **Shell**    | bash                                                      | PowerShell 7                                                                                          |
 | **Network**  | DC IP + Tailscale *(internal)*                            | Residential IP + Tailscale *(internal)*                                                               |
-| **Runs**     | `main.py` (FastAPI proxy + scraper) as systemd service    | `residential_fetcher.py` (headful Chromium) via Task Scheduler                                        |
+| **Runs**     | `main.py` (FastAPI proxy + scraper) as systemd service    | `residential_fetcher.py` (headless Chrome via nodriver) via Task Scheduler                                        |
 | **Service**  | `visual-hn.service` (`systemctl start/stop/restart`)    | `VHN-ResidentialFetcher` scheduled task                                                                |
 | **Venv**     | `.venv` (Python 3.10+)                                    | `.node-venv` (Python 3.11+)                                                                           |
-| **Role**     | Owns the DB, serves the public site, owns the scrape loop | Called by VPS only when curl_cffi gets 403/429/503 — solves CF JS challenges via real headful browser |
+| **Role**     | Owns the DB, serves the public site, owns the scrape loop | Called by VPS only when curl_cffi gets 403/429/503 — solves CF JS challenges via real Chrome (nodriver/CDP, headless) |
 
 **Commands are not interchangeable.** A `systemctl restart` does nothing on Windows; `Start-ScheduledTask` does nothing on the VPS. When a command in this file looks wrong for the machine you're on, check which environment you're in before assuming the doc is stale.
 
@@ -104,14 +104,14 @@ python -m playwright install chromium   # for screenshot fallback
 
 ### Setup — NODE (Windows 11, residential fetcher)
 
-Follow [`docs/NODE_SETUP.md`](docs/NODE_SETUP.md). Summary:
+Follow [`docs/NODE_SETUP.md`](docs/NODE_SETUP.md). Requires **system Chrome** installed
+(not a Playwright-bundled Chromium). Summary:
 
 ```powershell
 cd D:\GitHub\visual-hn
 python -m venv .node-venv
 .\.node-venv\Scripts\Activate.ps1
-pip install fastapi uvicorn playwright
-python -m playwright install chromium
+pip install fastapi uvicorn nodriver
 ```
 
 ### Run — VPS (development)

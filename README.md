@@ -60,7 +60,7 @@ See [`visual-hn-previews/README.md`](visual-hn-previews/README.md) for extension
 | `hn_scraper.py`          | Fetches top stories from the HN Firebase API  |
 | `metadata.py`            | Open Graph parsing, image download/resize     |
 | `database.py`            | Async persistence, trend calculation          |
-| `residential_fetcher.py` | Headful Chromium fallback (residential node)  |
+| `residential_fetcher.py` | Headless Chrome fallback (nodriver, residential node)  |
 | `filter_lists.py`        | Content-blocker filter list compilation       |
 | `models.py`              | SQLAlchemy ORM models                         |
 | `templates/`             | Legacy HTML templates                         |

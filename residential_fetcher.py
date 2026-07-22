@@ -1,22 +1,23 @@
-"""Headful Playwright fetcher for anti-bot circumvention.
+"""Headless nodriver fetcher for anti-bot circumvention.
 
 Runs on the residential node (residential IP) behind Tailscale. The VPS calls
-this when curl_cffi gets 403/429/503 — a real headful Chrome can solve Cloudflare
+this when curl_cffi gets 403/429/503 — a real Chrome via CDP can solve Cloudflare
 JS challenges that no HTTP client can.
 
-Uses a PERSISTENT browser context (launch_persistent_context):
-- ONE window stays open for the lifetime of the process — no flashing popups.
-- Cookies (including cf_clearance) survive across requests → fewer challenges.
-- A single tab navigates between URLs, so an unresolved CF challenge on site A
-  doesn't get wiped when site B arrives.
-
-When a CF challenge or captcha appears that the browser can't auto-solve, the
-page stays open for CF_CHALLENGE_MAX_WAIT (default 180s) — long enough for a
-human at the laptop to click the checkbox.
+Uses nodriver (undetected-chromedriver successor) in headless mode:
+- No visible window, no focus stealing, no Win32 hacks.
+- Persistent browser profile (cookies including cf_clearance survive).
+- Single tab navigates between URLs.
+- nodriver's CDP-based approach auto-passes most CF/Turnstile challenges.
+  When a managed challenge appears, the fetcher attempts to find and click
+  the "verify you are human" checkbox programmatically (nodriver's find()
+  searches iframes too). If it can't solve it in CF_CHALLENGE_MAX_WAIT,
+  the fetch returns error and the VPS falls through to the fallback chain.
 
 Requirements (residential node):
-    pip install fastapi uvicorn playwright
-    python -m playwright install chromium
+    pip install fastapi uvicorn nodriver
+    # System Chrome must be installed (nodriver uses the real binary, not a
+    # bundled Chromium like Playwright did).
 
 Run:
     python residential_fetcher.py
@@ -31,13 +32,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import sys
-import threading
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
+import nodriver as uc
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
@@ -49,44 +49,28 @@ logger = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("RESIDENTIAL_FETCHER_PORT", "8765"))
 SHARED_SECRET = os.environ.get("RESIDENTIAL_FETCHER_SECRET", "")
-NAV_TIMEOUT_MS = 30_000
-NETWORK_IDLE_MS = 24_000
 CF_SETTLE_SECONDS = 3.0
 CF_CHALLENGE_TITLE = "just a moment"
-# Long enough for a human at the laptop to notice the window, switch to it,
-# and click the Cloudflare checkbox or solve a captcha. The original 40s was
-# too short — by the time you noticed the window, it had already closed and
-# the fetch returned the challenge HTML.
-CF_CHALLENGE_MAX_WAIT = float(os.environ.get("CF_CHALLENGE_MAX_WAIT", "180"))
+# In headless mode there is no window for a human to solve interactive
+# challenges. This timeout is long enough for nodriver's auto-solve + CF's
+# JS to execute. If it doesn't resolve, the VPS falls through to Wayback →
+# screenshot → favicon composite.
+CF_CHALLENGE_MAX_WAIT = float(os.environ.get("CF_CHALLENGE_MAX_WAIT", "60"))
 MAX_HTML_CHARS = 2_000_000
-# Persistent profile keeps cookies (cf_clearance etc.) between requests.
 PROFILE_DIR = Path(
     os.environ.get(
         "RESIDENTIAL_FETCHER_PROFILE",
         str(Path(__file__).parent / ".browser-profile"),
     )
 )
-# UA must match the OS the fetcher runs on (Windows 11). Since Chrome 148,
-# Math.tanh reads the host libm, so Windows returns UCRT bits. Claiming a
-# different OS in the UA while returning Windows math bits is an instant
-# tell for any anti-bot that probes Math.tanh.
-# See https://scrapfly.dev/posts/browser-math-os-fingerprint/
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
-)
 
-# Background-foreground guard. Headful Chrome steals focus on launch and on
-# every navigation that triggers a renderer swap (Cloudflare reloads do this).
-# We keep the windows runnable (JS executes, CF challenges resolve) but strip
-# their right to ever enter the foreground via WS_EX_NOACTIVATE + Z-order floor.
-BACKGROUND_GUARD_ENABLED = sys.platform == "win32"
-BACKGROUND_GUARD_INTERVAL_S = 2.0
+# nodriver drives the real system Chrome, so the User-Agent and Math.tanh
+# fingerprint automatically match the host OS. No hardcoded UA needed — this
+# was a manual maintenance burden in the Playwright version and a mismatch
+# risk (claiming Chrome 148 while the bundled Chromium was a different build).
 
-# Persistent context: one window, one profile, reused for every request.
-_context: Any = None
-_pw: Any = None
-_page: Any = None  # the single navigating tab
+# Persistent browser: one instance, one profile, reused for every request.
+_browser: Any = None  # nodriver.Browser
 _lock = asyncio.Lock()
 _sem = asyncio.Semaphore(1)  # one fetch at a time — single tab
 
@@ -94,7 +78,7 @@ _sem = asyncio.Semaphore(1)  # one fetch at a time — single tab
 _last_fetch: dict[str, Any] = {
     "url": None,
     "status": "idle",
-    "at": None,  # unix timestamp
+    "at": None,
     "final_url": None,
     "bytes": 0,
     "error": None,
@@ -112,252 +96,87 @@ class FetchResult(BaseModel):
     error: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# Background guard (Windows only)
-# ---------------------------------------------------------------------------
-# Headful Chrome windows steal focus on launch and every renderer swap (which
-# Cloudflare challenges trigger). We identify the Chromium processes spawned by
-# this Python (via CreateToolhelp32Snapshot — no psutil dependency), then for
-# each of their top-level windows we:
-#   1. Add WS_EX_NOACTIVATE so clicks/focus requests are permanently ignored.
-#   2. Force HWND_BOTTOM Z-order with SWP_NOACTIVATE so they render behind all
-#      normal windows. JS still executes, CF challenges still resolve, but the
-#      windows never enter the foreground or disrupt the user.
-# Cross-platform: the worker is a no-op when BACKGROUND_GUARD_ENABLED is False
-# (e.g. running this file on the Ubuntu VPS for tests), so no OS branching is
-# needed at call sites.
-_guard_stop: threading.Event | None = None
-_guard_thread: threading.Thread | None = None
-
-if BACKGROUND_GUARD_ENABLED:
-    import ctypes
-    from ctypes import wintypes
-
-    GWL_EXSTYLE = -20
-    WS_EX_NOACTIVATE = 0x08000000
-    WS_EX_APPWINDOW = 0x00040000
-    HWND_BOTTOM = 1
-    SWP_NOACTIVATE = 0x0010
-    SWP_NOMOVE = 0x0002
-    SWP_NOSIZE = 0x0001
-    TH32CS_SNAPPROCESS = 0x00000002
-
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-
-    # NOTE: PROCESSENTRY32W is NOT defined as a ctypes Structure here.
-    # On Win64, ctypes struct marshaling through POINTER(Structure) argtypes
-    # silently corrupts the th32ParentProcessID field (reads 0 or garbage),
-    # which breaks the descendant PID walk and makes the guard miss Chrome.
-    # Using a raw byte buffer + struct.unpack is immune to this.
-    _ENTRY_SIZE = 568  # sizeof(PROCESSENTRY32W) on Win64
-
-    user32.GetWindowLongW.restype = ctypes.c_long
-    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-    user32.SetWindowLongW.restype = ctypes.c_long
-    user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
-    user32.SetWindowPos.restype = wintypes.BOOL
-    user32.SetWindowPos.argtypes = [
-        wintypes.HWND,
-        wintypes.HWND,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        wintypes.UINT,
-    ]
-    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-    user32.GetWindowThreadProcessId.argtypes = [
-        wintypes.HWND,
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    _ENUM_PROC_TYPE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    user32.EnumWindows.restype = wintypes.BOOL
-    user32.EnumWindows.argtypes = [_ENUM_PROC_TYPE, wintypes.LPARAM]
-
-    def _descendant_pids(root_pid: int) -> set[int]:
-        """Return root_pid + all descendants using a toolhelp snapshot."""
-        import struct as _struct
-
-        snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-        # INVALID_HANDLE_VALUE is -1 cast to HANDLE (void*). On Win64 the
-        # ctypes default c_int return gives -1 as a Python int; compare directly.
-        if snap == -1 or snap == ctypes.c_void_p(-1).value:
-            return {root_pid}
-        try:
-            buf = (ctypes.c_byte * _ENTRY_SIZE)()
-            ctypes.cast(buf, ctypes.POINTER(wintypes.DWORD))[0] = _ENTRY_SIZE
-            by_parent: dict[int, list[int]] = {}
-            if kernel32.Process32FirstW(snap, buf):
-                while True:
-                    raw = bytes(buf)
-                    pid = _struct.unpack_from("<I", raw, 8)[0]
-                    ppid = _struct.unpack_from("<I", raw, 32)[0]
-                    by_parent.setdefault(ppid, []).append(pid)
-                    for i in range(_ENTRY_SIZE):
-                        buf[i] = 0
-                    ctypes.cast(buf, ctypes.POINTER(wintypes.DWORD))[0] = _ENTRY_SIZE
-                    if not kernel32.Process32NextW(snap, buf):
-                        break
-            found: set[int] = set()
-            stack = [root_pid]
-            while stack:
-                pid = stack.pop()
-                if pid in found:
-                    continue
-                found.add(pid)
-                stack.extend(by_parent.get(pid, []))
-            return found
-        finally:
-            kernel32.CloseHandle(snap)
-
-    def _apply_no_activate(hwnd: int, _lparam: int) -> bool:
-        """EnumWindowsProc: strip activation rights from a top-level window."""
-        pid = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        if pid.value not in _guard_target_pids:
-            return True
-        ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-        if not (ex & WS_EX_NOACTIVATE):
-            user32.SetWindowLongW(
-                hwnd, GWL_EXSTYLE, (ex | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW
-            )
-        user32.SetWindowPos(
-            hwnd,
-            HWND_BOTTOM,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-        )
-        return True
-
-    # Hold the target PID set in a module-level so the C callback can read it.
-    _guard_target_pids: set[int] = set()
-    # Instantiate the C callback wrapper after _apply_no_activate is defined.
-    _enum_proc = _ENUM_PROC_TYPE(_apply_no_activate)
-
-    def _background_guard_loop(stop: threading.Event) -> None:
-        """Periodically re-assert no-activate on our Chromium windows."""
-        own_pid = os.getpid()
-        while not stop.wait(BACKGROUND_GUARD_INTERVAL_S):
-            global _guard_target_pids
-            _guard_target_pids = _descendant_pids(own_pid)
-            if not _guard_target_pids:
-                continue
-            try:
-                user32.EnumWindows(_enum_proc, 0)
-            except Exception as exc:
-                logger.debug("background guard enum failed: %s", exc)
-
-else:
-    # Non-Windows hosts (VPS tests, CI): guard is inert.
-    def _descendant_pids(root_pid: int) -> set[int]:
-        return set()
-
-    def _background_guard_loop(stop: threading.Event) -> None:
-        stop.wait()
-
-
-def _start_background_guard() -> None:
-    """Launch the no-activate enforcer thread. Safe to call on any OS."""
-    global _guard_stop, _guard_thread
-    if not BACKGROUND_GUARD_ENABLED:
-        return
-    if _guard_thread and _guard_thread.is_alive():
-        return
-    _guard_stop = threading.Event()
-    _guard_thread = threading.Thread(
-        target=_background_guard_loop,
-        args=(_guard_stop,),
-        name="VHN-BackgroundGuard",
-        daemon=True,
-    )
-    _guard_thread.start()
-    logger.info("Background guard started — Chrome windows will not steal focus")
-
-
 def _browser_is_alive() -> bool:
-    """True if the browser process is still connected and the page is usable."""
-    if not (_context and _page and not _page.is_closed()):
+    """True if the browser process is running and the CDP socket is connected."""
+    if not _browser:
         return False
-    browser = _context.browser
-    return bool(browser and browser.is_connected())
+    proc = getattr(_browser, "_process", None)
+    if not proc or proc.returncode is not None:
+        return False
+    return getattr(_browser, "socket", None) is not None
 
 
 async def _teardown_browser() -> None:
     """Tear down dead browser state so a fresh launch can proceed."""
-    global _context, _pw, _page
-    if _context:
+    global _browser
+    if _browser:
         try:
-            await _context.close()
+            await _browser.aclose()
         except Exception:
             pass
-    if _pw:
-        try:
-            await _pw.stop()
-        except Exception:
-            pass
-    _context = None
-    _pw = None
-    _page = None
+    proc = getattr(_browser, "_process", None) if _browser else None
+    if proc and proc.returncode is None:
+        with suppress(Exception):
+            proc.kill()
+    _browser = None
 
 
-async def _ensure_browser() -> tuple[Any, Any]:
-    """Launch the persistent context once. Returns (context, page).
+async def _ensure_browser() -> Any:
+    """Launch the browser once. Returns the nodriver.Browser.
 
-    The same window and tab are reused for every subsequent request. Cookies,
-    localStorage, and cf_clearance persist in PROFILE_DIR across restarts.
-    Auto-relaunches if the browser process has crashed or disconnected.
+    The same browser and profile are reused for every subsequent request.
+    Cookies, localStorage, and cf_clearance persist in PROFILE_DIR across
+    restarts. Auto-relaunches if the browser process has crashed.
     """
-    global _context, _pw, _page
+    global _browser
     if _browser_is_alive():
-        return _context, _page
+        return _browser
     async with _lock:
         if _browser_is_alive():
-            return _context, _page
-        if _context or _pw:
-            logger.warning(
-                "Browser disconnected (page_closed=%s, browser_connected=%s) — relaunching",
-                _page.is_closed() if _page else "no_page",
-                _context.browser.is_connected() if _context and _context.browser else "no_browser",
-            )
+            return _browser
+        if _browser:
+            logger.warning("Browser process died — relaunching")
             await _teardown_browser()
-        from playwright.async_api import async_playwright
 
         PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-        _pw = await async_playwright().start()
-        _context = await _pw.chromium.launch_persistent_context(
+        _browser = await uc.start(
+            headless=True,
             user_data_dir=str(PROFILE_DIR),
-            headless=False,
-            user_agent=USER_AGENT,
-            viewport={"width": 1280, "height": 900},
-            locale="en-US",
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--disable-infobars",
-                "--no-first-run",
-                # Spawn off-screen so the first paint never lands on the desktop.
-                "--window-position=-2400,-2400",
-                "--window-size=1280,900",
-            ],
+            lang="en-US",
+            browser_args=["--no-first-run"],
         )
-        # Start the background guard immediately so no-activate is applied
-        # before any navigation can trigger a focus-stealing renderer swap.
-        _start_background_guard()
-        # Hide webdriver flag for extra stealth.
-        await _context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        logger.info("Browser launched (headless nodriver, profile=%s)", PROFILE_DIR)
+        return _browser
+
+
+async def _get_title(tab: Any) -> str:
+    """Get the page title (lowercased) via JS evaluation."""
+    try:
+        result = await tab.evaluate("document.title", return_by_value=True)
+        return result.lower() if isinstance(result, str) else ""
+    except Exception:
+        return ""
+
+
+async def _try_solve_cf_challenge(tab: Any) -> bool:
+    """Attempt to find and click a CF/Turnstile 'verify' checkbox.
+
+    nodriver's find() searches iframes too, so it can locate the Turnstile
+    widget inside its iframe. Returns True if a checkbox was clicked.
+    """
+    try:
+        checkbox = await asyncio.wait_for(
+            tab.find("verify you are human", best_match=True, timeout=5),
+            timeout=8,
         )
-        # Use the first tab if one already exists (persistent context reopens
-        # the last tab); otherwise open one.
-        if _context.pages:
-            _page = _context.pages[0]
-        else:
-            _page = await _context.new_page()
-        logger.info("Persistent browser launched (headful, profile=%s)", PROFILE_DIR)
-        return _context, _page
+        if checkbox:
+            await checkbox.click()
+            logger.info("CF challenge checkbox clicked")
+            await tab.wait(3)
+            return True
+    except Exception as exc:
+        logger.debug("CF checkbox search: %s", exc)
+    return False
 
 
 def _record(status: str, **fields: Any) -> None:
@@ -365,62 +184,51 @@ def _record(status: str, **fields: Any) -> None:
 
 
 async def _fetch_with_browser(url: str) -> FetchResult:
-    """Navigate the single tab to URL, wait for CF challenges, return HTML."""
-    _context, page = await _ensure_browser()
+    """Navigate to URL, wait for CF challenges, return HTML."""
+    browser = await _ensure_browser()
     _record("navigating", url=url, error=None)
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
-        logger.info("DOM loaded for %s, waiting for network idle...", url)
+        tab = await browser.get(url)
+        await tab.wait(2)
 
-        # Wait for networkidle — CF challenges make network requests while
-        # resolving (token fetch, JS exec, redirect). networkidle fires when
-        # no requests for 500ms, which reliably catches challenge completion.
-        try:
-            await page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_MS)
-            logger.info("Network idle for %s", url)
-        except Exception:
-            logger.info("Network idle timeout for %s (may have continuous pings)", url)
-
-        # Secondary check: if title still shows CF challenge, WAIT. The window
-        # is already open and visible — a human at the laptop can click the
-        # Cloudflare checkbox or solve the captcha. We poll until the challenge
-        # resolves or CF_CHALLENGE_MAX_WAIT elapses.
+        # CF challenge detection + auto-solve loop. nodriver auto-passes most
+        # managed challenges, but interactive Turnstile widgets sometimes need
+        # a click. We poll the page title — "just a moment" = CF interstitial.
         cf_deadline = asyncio.get_event_loop().time() + CF_CHALLENGE_MAX_WAIT
         challenged = False
         while asyncio.get_event_loop().time() < cf_deadline:
-            title = (await page.title() or "").lower()
+            title = await _get_title(tab)
             if CF_CHALLENGE_TITLE not in title:
                 break
             challenged = True
-            await asyncio.sleep(2.0)
+            await _try_solve_cf_challenge(tab)
+            await asyncio.sleep(3)
 
         if challenged:
-            final_title = (await page.title() or "").lower()
+            final_title = await _get_title(tab)
             if CF_CHALLENGE_TITLE in final_title:
                 logger.warning(
-                    "CF challenge did not resolve in %.0fs for %s "
-                    "(window left open — human can still solve it)",
+                    "CF challenge did not resolve in %.0fs for %s",
                     CF_CHALLENGE_MAX_WAIT,
                     url,
                 )
             else:
                 logger.info("CF challenge solved for %s", url)
 
-        # Final settle for dynamic content (SPA hydration, lazy images, etc.)
+        # Final settle for dynamic content (SPA hydration, lazy images).
         await asyncio.sleep(CF_SETTLE_SECONDS)
 
-        html = await page.content()
-        final_url = page.url
+        html = await tab.get_content()
+        try:
+            final_url = await tab.evaluate("window.location.href", return_by_value=True)
+        except Exception:
+            final_url = url
+
         if len(html) > MAX_HTML_CHARS:
             html = html[:MAX_HTML_CHARS]
         nbytes = len(html.encode("utf-8", errors="ignore"))
         logger.info("Returning %.0f KB for %s", nbytes / 1024, final_url)
-        _record(
-            "ok",
-            url=url,
-            final_url=final_url,
-            bytes=nbytes,
-        )
+        _record("ok", url=url, final_url=final_url, bytes=nbytes)
         return FetchResult(html=html, final_url=final_url)
     except Exception as exc:
         logger.warning("Fetch failed for %s: %s - %s", url, type(exc).__name__, exc)
@@ -438,16 +246,12 @@ async def lifespan(app: FastAPI):
     logger.info("Residential fetcher starting on 0.0.0.0:%d", PORT)
     logger.info("Profile dir: %s", PROFILE_DIR)
     logger.info(
-        "CF challenge max wait: %.0fs (window stays open for human solving)",
-        CF_CHALLENGE_MAX_WAIT,
+        "CF challenge max wait: %.0fs (headless auto-solve)", CF_CHALLENGE_MAX_WAIT
     )
     yield
-    if _guard_stop:
-        _guard_stop.set()
-    if _context:
-        await _context.close()
-    if _pw:
-        await _pw.stop()
+    if _browser:
+        with suppress(Exception):
+            await _browser.aclose()
 
 
 app = FastAPI(title="Visual-HN Residential Fetcher", lifespan=lifespan)
@@ -455,18 +259,11 @@ app = FastAPI(title="Visual-HN Residential Fetcher", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    """Health check with browser connection state and last-fetch metrics.
-
-    Drops the Math.tanh self-probe from the old version — it opened a fresh
-    context per check, which defeats the persistent-context model. The UA/OS
-    consistency is verified once at startup via the profile's actual Chrome
-    build, not re-probed on every /health call.
-    """
+    """Health check with browser connection state and last-fetch metrics."""
     browser_connected = _browser_is_alive()
     return {
         "status": "ok" if browser_connected else "degraded",
         "browser_connected": browser_connected,
-        "user_agent": USER_AGENT,
         "profile_dir": str(PROFILE_DIR),
         "port": PORT,
         "last_fetch": dict(_last_fetch),

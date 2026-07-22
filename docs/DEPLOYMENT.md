@@ -6,7 +6,7 @@ Visual-HN runs across two machines. This doc covers how each is set up, how code
 | ------------------- | ---------------------------------------- | ------------------------------------------------ |
 | **OS**              | Ubuntu 24.04 LTS (Hetzner CX32)          | Windows 11 (residential laptop)                  |
 | **Shell**           | bash                                     | PowerShell 7                                     |
-| **Runs**            | `main.py` — FastAPI proxy + scraper + DB | `residential_fetcher.py` — headful Chromium      |
+| **Runs**            | `main.py` — FastAPI proxy + scraper + DB | `residential_fetcher.py` — headless Chrome (nodriver)    |
 | **Service manager** | systemd (`visual-hn.service`)            | Windows Task Scheduler (`VHN-ResidentialFetcher`) |
 | **Venv**            | `.venv/`                                 | `.node-venv/`                                    |
 
@@ -70,13 +70,13 @@ When the VPS's curl_cffi fetch gets 403/429/503 from a story URL (Cloudflare/Edg
 
 ```
 VPS  →  POST http://<tailscale-ip>:<port>/fetch {"url": "..."}
-NODE →  launches a fresh incognito context in a persistent headful Chromium
-NODE →  navigates to URL, waits 3s for CF JS challenges to auto-solve
+NODE →  navigates the URL in a persistent headless Chrome (nodriver/CDP)
+NODE →  waits for CF JS challenges to auto-solve, attempts checkbox if needed
 NODE →  returns the fully-rendered HTML
 VPS  →  parses og:image from the returned HTML
 ```
 
-A real headful browser on a residential IP passes challenges no HTTP client can — this is the entire reason the node exists. See [`docs_internal/anti-scraping.md`](../docs_internal/anti-scraping.md) *(internal; git-ignored)* for the full fallback chain.
+A real Chrome on a residential IP passes challenges no HTTP client can — this is the entire reason the node exists. See [`docs_internal/anti-scraping.md`](../docs_internal/anti-scraping.md) *(internal; git-ignored)* for the full fallback chain.
 
 ### First-time setup
 
