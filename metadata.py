@@ -367,22 +367,10 @@ def is_public_http_url(url: str | None) -> bool:
                 resolved = ipaddress.ip_address(address)
             except ValueError:
                 continue
-            if (
-                resolved.is_private
-                or resolved.is_loopback
-                or resolved.is_link_local
-                or resolved.is_reserved
-                or resolved.is_multicast
-            ):
+            if resolved.is_multicast or not resolved.is_global:
                 return False
         return True
-    return not (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-    )
+    return not (ip.is_multicast or not ip.is_global)
 
 
 def _meta_content(soup: BeautifulSoup, *selectors: tuple[str, str]) -> str:

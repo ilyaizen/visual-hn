@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -143,7 +144,7 @@ async def _ensure_browser() -> Any:
             headless=True,
             user_data_dir=str(PROFILE_DIR),
             lang="en-US",
-            browser_args=["--no-first-run"],
+            browser_args=["--no-first-run", "--headless=new"],
         )
         logger.info("Browser launched (headless nodriver, profile=%s)", PROFILE_DIR)
         return _browser
@@ -236,13 +237,22 @@ async def _fetch_with_browser(url: str) -> FetchResult:
         return FetchResult(status="error", error=f"{type(exc).__name__}: {exc}")
 
 
+MIN_SECRET_LENGTH = 24
+
+
 def _verify_auth(secret: str | None) -> None:
-    if SHARED_SECRET and secret != SHARED_SECRET:
+    if not SHARED_SECRET:
+        return
+    if secret is None or not secrets.compare_digest(secret, SHARED_SECRET):
         raise HTTPException(status_code=403, detail="unauthorized")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if SHARED_SECRET and len(SHARED_SECRET) < MIN_SECRET_LENGTH:
+        raise RuntimeError(
+            f"RESIDENTIAL_FETCHER_SECRET must be at least {MIN_SECRET_LENGTH} chars"
+        )
     logger.info("Residential fetcher starting on 0.0.0.0:%d", PORT)
     logger.info("Profile dir: %s", PROFILE_DIR)
     logger.info(

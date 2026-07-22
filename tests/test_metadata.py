@@ -342,6 +342,8 @@ def test_is_public_http_url_rejects_private_and_local_targets():
     assert not metadata.is_public_http_url("http://localhost/story")
     assert not metadata.is_public_http_url("https://127.0.0.1/story")
     assert not metadata.is_public_http_url("https://192.168.1.10/story")
+    assert not metadata.is_public_http_url("https://100.64.0.1/story")
+    assert not metadata.is_public_http_url("https://169.254.169.254/latest/meta-data/")
     assert metadata.is_public_http_url("https://example.com/story")
 
 
