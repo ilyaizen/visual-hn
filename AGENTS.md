@@ -10,22 +10,22 @@ Visual-HN — HN w/ pics. FastAPI app that proxies hcker.news, adds preview imag
 
 This project runs across **two machines**. Code runs in both places; commands are not portable.
 
-|              | VPS (proxy + scraper)                                     | Residential node (Cloudflare bypass)                                                                  |
-| ------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **OS**       | Ubuntu 24.04 (Hetzner CX32)                               | Windows 11 (residential laptop)                                                                       |
-| **Hostname** | *(see internal docs)*                                     | *(see internal docs)*                                                                                 |
-| **Shell**    | bash                                                      | PowerShell 7                                                                                          |
-| **Network**  | DC IP + Tailscale *(internal)*                            | Residential IP + Tailscale *(internal)*                                                               |
-| **Runs**     | `main.py` (FastAPI proxy + scraper) as systemd service    | `residential_fetcher.py` (headless Chrome via nodriver) via Task Scheduler                                        |
+|              | VPS (proxy + scraper)                                     | Residential node (Cloudflare bypass)                                                                                  |
+| ------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **OS**       | Ubuntu 24.04 (Hetzner CX32)                               | Windows 11 (residential laptop)                                                                                       |
+| **Hostname** | *(see internal docs)*                                     | *(see internal docs)*                                                                                                 |
+| **Shell**    | bash                                                      | PowerShell 7                                                                                                          |
+| **Network**  | DC IP + Tailscale *(internal)*                            | Residential IP + Tailscale *(internal)*                                                                               |
+| **Runs**     | `main.py` (FastAPI proxy + scraper) as systemd service    | `residential_fetcher.py` (headless Chrome via Playwright) via Task Scheduler                                        |
 | **Service**  | `visual-hn.service` (`systemctl start/stop/restart`)    | `VHN-ResidentialFetcher` scheduled task                                                                |
 | **Venv**     | `.venv` (Python 3.10+)                                    | `.node-venv` (Python 3.11+)                                                                           |
-| **Role**     | Owns the DB, serves the public site, owns the scrape loop | Called by VPS only when curl_cffi gets 403/429/503 — solves CF JS challenges via real Chrome (nodriver/CDP, headless) |
+| **Role**     | Owns the DB, serves the public site, owns the scrape loop | Called by VPS only when curl_cffi gets 403/429/503 — solves CF JS challenges via real Chrome (Playwright, headless) |
 
 **Commands are not interchangeable.** A `systemctl restart` does nothing on Windows; `Start-ScheduledTask` does nothing on the VPS. When a command in this file looks wrong for the machine you're on, check which environment you're in before assuming the doc is stale.
 
 Full deployment instructions for both environments: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The residential node is intermittent by design — it's a laptop under daily use. When it's off, the VPS falls through to Wayback Machine → screenshot → favicon composite. No blocking, no alerting. See [`docs_internal/anti-scraping.md`](docs_internal/anti-scraping.md) for the full fallback chain.
 
-## 1. Think Before Code
+## Think Before Code
 
 No assume. No hide confusion. Surface tradeoffs.
 
@@ -34,7 +34,7 @@ No assume. No hide confusion. Surface tradeoffs.
 - Simpler path exist → say so. Push back when warranted.
 - Unclear → stop. Name confusion. Ask.
 
-## 2. Simplicity First
+## Simplicity First
 
 Min code that solve problem. Nothing speculative.
 
@@ -46,7 +46,7 @@ Min code that solve problem. Nothing speculative.
 
 Test: senior eng call this overcomplicated? Yes → simplify.
 
-## 3. Surgical Changes
+## Surgical Changes
 
 Touch only what must. Clean only own mess.
 
@@ -59,7 +59,7 @@ Touch only what must. Clean only own mess.
 
 Test: every changed line trace to user request.
 
-## 4. Goal-Driven Execution
+## Goal-Driven Execution
 
 Define success. Loop until verified.
 
@@ -69,9 +69,7 @@ Define success. Loop until verified.
 
 Multi-step → state plan: `[step] → verify: [check]`.
 
-## 5. Branching, Checks, Commits
-
-### Always work on a new branch
+## Branching, Checks, Commits
 
 Before making any changes, create a branch from `main`:
 
@@ -81,16 +79,15 @@ git checkout main && git pull && git checkout -b <descriptive-name>
 
 Never commit directly to `main`. Every task gets its own branch.
 
-### Checks and commits — run freely
-
-Run checks (`black .`, `pytest`) and commit as you go. No need to ask. Use [Conventional Commits](https://www.conventionalcommits.org/) messages.
+Run checks (`black .`, `pytest`) and commit as you go. Use [Conventional Commits](https://www.conventionalcommits.org/) messages.
 
 1. `black .` — Python formatting.
 2. `pytest` — run all tests.
 
-### Push / publish / PR — ask first
+## Push / publish / PR — ask first
 
 **Always** get explicit user confirmation before:
+
 - `git push` (any remote)
 - Opening a PR (`gh pr create`)
 - Publishing or deploying anything
@@ -123,14 +120,15 @@ python -m playwright install chromium   # for screenshot fallback
 
 ### Setup — NODE (Windows 11, residential fetcher)
 
-Follow [`docs/NODE_SETUP.md`](docs/NODE_SETUP.md). Requires **system Chrome** installed
-(not a Playwright-bundled Chromium). Summary:
+Follow [`docs/NODE_SETUP.md`](docs/NODE_SETUP.md). Uses Playwright with bundled
+Chromium (no system Chrome required). Summary:
 
 ```powershell
 cd D:\GitHub\visual-hn
 python -m venv .node-venv
 .\.node-venv\Scripts\Activate.ps1
-pip install fastapi uvicorn nodriver
+pip install fastapi uvicorn playwright
+python -m playwright install chromium
 ```
 
 ### Run — VPS (development)

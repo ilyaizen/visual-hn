@@ -6,6 +6,7 @@ import uvicorn
 import asyncio
 import secrets
 import time
+from contextlib import suppress
 from typing import Any, AsyncGenerator
 from datetime import datetime
 import os
@@ -118,6 +119,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         logger.info("Scraper task cancelled successfully.")
     except Exception as e:
         logger.error(f"Error during scraper task cancellation: {e}", exc_info=True)
+
+    # Close the shared screenshot browser
+    with suppress(Exception):
+        from screenshot import shutdown_browser
+
+        await shutdown_browser()
 
     logger.info("Application shutdown complete.")
 
@@ -436,7 +443,9 @@ async def admin_page(request: Request):
     if not _admin_password():
         return HTMLResponse("Not Found", status_code=404)
     if not _is_admin_authorized(request):
-        return templates.TemplateResponse(request, "admin.html", {"request": request, "authed": False})
+        return templates.TemplateResponse(
+            request, "admin.html", {"request": request, "authed": False}
+        )
     node = await _fetch_node_health()
     db_stats = await _fetch_db_stats()
     return templates.TemplateResponse(
@@ -472,12 +481,14 @@ async def admin_stats_api(request: Request):
         _fetch_node_health(),
         _fetch_db_stats(),
     )
-    return JSONResponse({
-        "node": node,
-        "db": db_stats,
-        "scraper": dict(scraper_status),
-        "server_time": time.time(),
-    })
+    return JSONResponse(
+        {
+            "node": node,
+            "db": db_stats,
+            "scraper": dict(scraper_status),
+            "server_time": time.time(),
+        }
+    )
 
 
 @app.get("/admin/api/recent-screenshots")
@@ -524,7 +535,11 @@ async def admin_login(request: Request):
         return templates.TemplateResponse(
             request,
             "admin.html",
-            {"request": request, "authed": False, "error": "Too many attempts. Wait a few minutes."},
+            {
+                "request": request,
+                "authed": False,
+                "error": "Too many attempts. Wait a few minutes.",
+            },
             status_code=429,
         )
     form = await request.form()
