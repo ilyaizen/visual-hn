@@ -8,8 +8,8 @@ import logging
 import time
 from typing import Any
 from pathlib import Path
-from urllib.request import Request as UrlRequest, urlopen
 
+import aiohttp
 from bs4 import BeautifulSoup
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -111,7 +111,7 @@ CACHE_BYTES_HARD = 60 * 60  # 60 min — assets hard TTL
 # ── Upstream fetchers ────────────────────────────────────────────────────────
 
 
-def fetch_hcker_news_html(query: bytes = b"") -> str:
+async def fetch_hcker_news_html(query: bytes = b"") -> str:
     """Fetch hcker.news homepage.  Returns fresh cache → fetches upstream →
     falls back to stale cache on failure (graceful degradation).
     When *query* is provided (e.g. ``b"view=frontpage"``), the upstream URL
@@ -127,10 +127,13 @@ def fetch_hcker_news_html(query: bytes = b"") -> str:
         url = HCKER_NEWS_ORIGIN + "/"
         if query:
             url += "?" + query.decode("utf-8", errors="ignore")
-        request = UrlRequest(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(request, timeout=15) as response:
-            charset = response.headers.get_content_charset() or "utf-8"
-            html = response.read().decode(charset, errors="replace")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as response:
+                html = await response.text(errors="replace")
         _cache.set(cache_key, html, CACHE_HTML_SOFT, CACHE_HTML_HARD)
         return html
     except Exception as exc:
@@ -142,7 +145,7 @@ def fetch_hcker_news_html(query: bytes = b"") -> str:
         raise  # no cache at all — let caller handle the 502
 
 
-def fetch_hcker_news_bytes(path: str, query: bytes = b"") -> tuple[bytes, str]:
+async def fetch_hcker_news_bytes(path: str, query: bytes = b"") -> tuple[bytes, str]:
     """Fetch proxied asset/API.  Returns fresh cache → fetches upstream →
     falls back to stale cache on failure."""
     cache_key = f"bytes:{path}:{query!r}"
@@ -154,15 +157,19 @@ def fetch_hcker_news_bytes(path: str, query: bytes = b"") -> tuple[bytes, str]:
         url = f"{HCKER_NEWS_ORIGIN}/{suffix}"
         if query:
             url += "?" + query.decode("utf-8", errors="ignore")
-        request = UrlRequest(
-            url,
-            headers={"User-Agent": "Mozilla/5.0", "Referer": HCKER_NEWS_ORIGIN + "/"},
-        )
-        with urlopen(request, timeout=15) as response:
-            content_type = response.headers.get(
-                "content-type", "application/octet-stream"
-            )
-            result = (response.read(), content_type)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Referer": HCKER_NEWS_ORIGIN + "/",
+                },
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as response:
+                content_type = response.headers.get(
+                    "content-type", "application/octet-stream"
+                )
+                result = (await response.read(), content_type)
         _cache.set(cache_key, result, CACHE_BYTES_SOFT, CACHE_BYTES_HARD)
         return result
     except Exception as exc:
@@ -384,8 +391,7 @@ def _cache_control(path: str) -> str:
 
 async def proxy_hcker_news_path(path: str, request: Request) -> Response:
     try:
-        body, content_type = await asyncio.to_thread(
-            fetch_hcker_news_bytes,
+        body, content_type = await fetch_hcker_news_bytes(
             path,
             request.scope.get("query_string", b""),
         )
@@ -511,7 +517,7 @@ def register_routes(app) -> None:
         qs = request.scope.get("query_string", b"").decode("utf-8", errors="ignore")
         fetch_query = b"view=frontpage" if "view=frontpage" in qs else b""
         try:
-            html = await asyncio.to_thread(fetch_hcker_news_html, fetch_query)
+            html = await fetch_hcker_news_html(fetch_query)
         except Exception as exc:
             logger.warning("Failed to proxy hcker.news homepage: %s", exc)
             return HTMLResponse(
