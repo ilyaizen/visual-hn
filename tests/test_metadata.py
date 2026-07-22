@@ -96,7 +96,9 @@ def test_screenshot_fallback_is_enabled_by_default_for_story_images():
 
 
 def test_metadata_cache_is_bounded_lru(monkeypatch):
-    monkeypatch.setattr(metadata, "METADATA_CACHE_MAX_ITEMS", 2)
+    import metadata.cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "METADATA_CACHE_MAX_ITEMS", 2)
     metadata.metadata_cache.clear()
 
     metadata.cache_metadata("https://example.com/1", {"description": "one"})
