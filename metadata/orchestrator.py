@@ -106,7 +106,7 @@ async def fetch_metadata(
     og_image_url = None
 
     # PDF URLs
-    if url.lower().endswith(".pdf"):
+    if url.lower().endswith(".pdf") and time.monotonic() < deadline:
         logger.info("PDF URL detected, rendering first page for %s", url)
         image_filename = await _render_pdf_first_page(url)
         if image_filename:
@@ -276,7 +276,7 @@ async def fetch_metadata(
         else:
             logger.warning("Skipping screenshot fallback for unsafe URL %s", final_url)
 
-    if not image_filename and not og_image_url:
+    if not image_filename and not og_image_url and time.monotonic() < deadline:
         image_filename = await generate_favicon_composite(url)
 
     metadata = {

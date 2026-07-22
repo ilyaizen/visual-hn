@@ -155,11 +155,29 @@ async def capture_screenshot(url: str) -> str | None:
             page = await context.new_page()
 
             # Layer 1: abort requests to cookie-consent / annoyance domains
+            # + SSRF guard: block redirects to private/internal targets
             async def _block_route(route):
-                if filter_lists.is_blocked_url(route.request.url):
+                req_url = route.request.url
+                if filter_lists.is_blocked_url(req_url):
                     await route.abort()
-                else:
-                    await route.continue_()
+                    return
+                # SSRF: validate every navigation/request target
+                from urllib.parse import urlparse
+
+                parsed = urlparse(req_url)
+                host = (parsed.hostname or "").lower()
+                if (
+                    host in {"localhost", "localhost.localdomain"}
+                    or host.endswith(".local")
+                    or host.startswith("127.")
+                    or host.startswith("10.")
+                    or host.startswith("192.168.")
+                    or host.startswith("169.254.")
+                ):
+                    logger.warning("Screenshot route blocked SSRF target: %s", req_url)
+                    await route.abort()
+                    return
+                await route.continue_()
 
             await page.route("**/*", _block_route)
 

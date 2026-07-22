@@ -133,6 +133,7 @@ async def fetch_hcker_news_html(query: bytes = b"") -> str:
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
+                response.raise_for_status()
                 html = await response.text(errors="replace")
         _cache.set(cache_key, html, CACHE_HTML_SOFT, CACHE_HTML_HARD)
         return html
@@ -166,6 +167,7 @@ async def fetch_hcker_news_bytes(path: str, query: bytes = b"") -> tuple[bytes, 
                 },
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
+                response.raise_for_status()
                 content_type = response.headers.get(
                     "content-type", "application/octet-stream"
                 )

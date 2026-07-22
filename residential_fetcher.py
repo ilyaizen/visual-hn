@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
-from playwright.async_api import BrowserContext, async_playwright
+from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
 logging.basicConfig(
@@ -62,10 +62,10 @@ PROFILE_DIR = Path(
     )
 )
 
-# Persistent browser: one Playwright instance, one browser process, reused
-# for every request. Each request gets a new context for cookie isolation.
+# Persistent browser: one Playwright instance, one persistent context.
+# cf_clearance and other cookies persist in PROFILE_DIR across restarts.
 _playwright: Any = None
-_browser: Any = None  # playwright.async_api.Browser
+_browser: Any = None  # playwright.async_api.BrowserContext (persistent)
 _lock = asyncio.Lock()
 _sem = asyncio.Semaphore(1)  # one fetch at a time
 
@@ -95,7 +95,10 @@ def _browser_is_alive() -> bool:
     """True if the browser process is running and connected."""
     if not _browser:
         return False
-    return _browser.is_connected()
+    try:
+        return _browser._browser.is_connected()
+    except Exception:
+        return False
 
 
 async def _teardown_browser() -> None:
@@ -112,11 +115,11 @@ async def _teardown_browser() -> None:
 
 
 async def _ensure_browser() -> Any:
-    """Launch the browser once. Returns the Playwright Browser.
+    """Launch the browser once. Returns the persistent BrowserContext.
 
-    The same browser process is reused for every subsequent request.
-    Cookies and cf_clearance persist in PROFILE_DIR across restarts via
-    launch_persistent_context. Auto-relaunches if the browser crashed.
+    Uses launch_persistent_context so cf_clearance and other cookies survive
+    in PROFILE_DIR across restarts, matching the old nodriver behavior.
+    Auto-relaunches if the browser crashed.
     """
     global _browser, _playwright
     if _browser_is_alive():
@@ -128,15 +131,17 @@ async def _ensure_browser() -> Any:
             logger.warning("Browser process died — relaunching")
             await _teardown_browser()
 
+        PROFILE_DIR.mkdir(parents=True, exist_ok=True)
         _playwright = await async_playwright().start()
-        _browser = await _playwright.chromium.launch(
+        _browser = await _playwright.chromium.launch_persistent_context(
+            user_data_dir=str(PROFILE_DIR),
             headless=True,
             args=[
                 "--no-first-run",
                 "--disable-blink-features=AutomationControlled",
             ],
         )
-        logger.info("Browser launched (headless Playwright)")
+        logger.info("Browser launched (headless Playwright, profile=%s)", PROFILE_DIR)
         return _browser
 
 
@@ -184,18 +189,17 @@ def _record(status: str, **fields: Any) -> None:
 
 
 async def _fetch_with_browser(url: str) -> FetchResult:
-    """Navigate to URL, wait for CF challenges, return HTML."""
+    """Navigate to URL, wait for CF challenges, return HTML.
+
+    Uses the persistent browser context so cf_clearance cookies survive
+    across requests. Validates the final URL against SSRF targets.
+    """
     browser = await _ensure_browser()
     _record("navigating", url=url, error=None)
 
-    context: BrowserContext | None = None
+    page: Any = None
     try:
-        # New context per request for cookie isolation. Cookies are NOT
-        # persisted to PROFILE_DIR — cf_clearance is ephemeral per context.
-        # This is intentional: a stale cf_clearance from a previous domain
-        # can cause CF to re-challenge. A fresh context always starts clean.
-        context = await browser.new_context()
-        page = await context.new_page()
+        page = await browser.new_page()
 
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         await asyncio.sleep(2)
@@ -224,8 +228,27 @@ async def _fetch_with_browser(url: str) -> FetchResult:
 
         await asyncio.sleep(CF_SETTLE_SECONDS)
 
-        html = await page.content()
         final_url = page.url
+        html = await page.content()
+
+        # SSRF guard: reject if the browser was redirected to an unsafe target.
+        from urllib.parse import urlparse
+
+        parsed = urlparse(final_url)
+        host = (parsed.hostname or "").lower()
+        if (
+            host in {"localhost", "localhost.localdomain"}
+            or host.endswith(".local")
+            or host.startswith("127.")
+            or host.startswith("10.")
+            or host.startswith("192.168.")
+            or host.startswith("169.254.")
+        ):
+            logger.warning(
+                "Residential fetch redirected to unsafe URL %s — rejecting", final_url
+            )
+            _record("error", url=url, error=f"SSRF blocked: {final_url}")
+            return FetchResult(status="error", error=f"SSRF blocked: {final_url}")
 
         if len(html) > MAX_HTML_CHARS:
             html = html[:MAX_HTML_CHARS]
@@ -238,9 +261,9 @@ async def _fetch_with_browser(url: str) -> FetchResult:
         _record("error", url=url, error=f"{type(exc).__name__}: {exc}")
         return FetchResult(status="error", error=f"{type(exc).__name__}: {exc}")
     finally:
-        if context:
+        if page:
             with suppress(Exception):
-                await context.close()
+                await page.close()
 
 
 def _verify_auth(secret: str | None) -> None:
