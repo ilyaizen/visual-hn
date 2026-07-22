@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import socket
+import time
 from collections import OrderedDict
 from contextlib import suppress
 from io import BytesIO
@@ -60,6 +61,7 @@ SCREENSHOT_TIMEOUT_SECONDS = float(os.environ.get("VHN_SCREENSHOT_TIMEOUT", "20"
 METADATA_CACHE_MAX_ITEMS = int(os.environ.get("VHN_METADATA_CACHE_MAX_ITEMS", "300"))
 METADATA_MAX_RETRIES = int(os.environ.get("VHN_METADATA_MAX_RETRIES", "3"))
 CFFI_TIMEOUT = int(os.environ.get("VHN_CFFI_TIMEOUT", "25"))
+METADATA_DEADLINE_SECONDS = float(os.environ.get("VHN_METADATA_DEADLINE_SECONDS", "90"))
 MIN_IMAGE_WIDTH = 400
 MIN_IMAGE_HEIGHT = 100
 # Budget guard: stored images are capped to this width and heavily JPEG-compressed
@@ -114,7 +116,7 @@ def normalize_whitespace(value: str | None) -> str:
 
 
 async def _curl_cffi_fetch_html(
-    url: str, headers: dict[str, str]
+    url: str, headers: dict[str, str], deadline: float | None = None
 ) -> tuple[str | None, str | None]:
     """Fetch HTML via curl_cffi with Chrome TLS fingerprint.
 
@@ -127,19 +129,32 @@ async def _curl_cffi_fetch_html(
             timeout=CFFI_TIMEOUT,
             verify=True,
         ) as cffi_session:
-            response = await cffi_session.get(
-                url,
-                headers=headers,
-                allow_redirects=True,
-            )
-            response.raise_for_status()
-            final_url = response.url or url
-
-            if not is_public_http_url(final_url):
-                logger.warning(
-                    "curl_cffi redirected %s to unsafe URL %s", url, final_url
+            current_url = url
+            response = None
+            for _ in range(6):
+                if not is_public_http_url(current_url):
+                    logger.warning(
+                        "curl_cffi redirect chain hit unsafe URL %s", current_url
+                    )
+                    return None, current_url
+                response = await cffi_session.get(
+                    current_url,
+                    headers=headers,
+                    allow_redirects=False,
                 )
-                return None, final_url
+                if response.status_code in (301, 302, 303, 307, 308):
+                    location = response.headers.get("location")
+                    if not location:
+                        break
+                    current_url = urljoin(current_url, location)
+                    continue
+                break
+            else:
+                logger.warning("curl_cffi: too many redirects for %s", url)
+                return None, current_url
+
+            final_url = str(response.url) or current_url
+            response.raise_for_status()
 
             content_type = (response.headers.get("content-type") or "").lower()
             if (
@@ -175,12 +190,23 @@ async def _curl_cffi_fetch_html(
             status_code = getattr(resp, "status_code", None)
 
         if status_code in (401, 403, 429, 503) and RESIDENTIAL_FETCHER_URL:
+            remaining = (
+                (deadline - time.monotonic())
+                if deadline
+                else RESIDENTIAL_FETCHER_TIMEOUT
+            )
+            if remaining <= 0:
+                logger.info(
+                    "curl_cffi got %s for %s but deadline exhausted", status_code, url
+                )
+                return None, None
             logger.info(
-                "curl_cffi got %s for %s, deferring to residential fetcher",
+                "curl_cffi got %s for %s, deferring to residential fetcher (%.0fs budget)",
                 status_code,
                 url,
+                remaining,
             )
-            return await _residential_fetch_html(url)
+            return await _residential_fetch_html(url, timeout_override=remaining)
 
         logger.warning(
             "curl_cffi fetch failed for %s: %s - %s",
@@ -192,7 +218,9 @@ async def _curl_cffi_fetch_html(
     return None, None
 
 
-async def _residential_fetch_html(url: str) -> tuple[str | None, str | None]:
+async def _residential_fetch_html(
+    url: str, timeout_override: float | None = None
+) -> tuple[str | None, str | None]:
     """Call the residential node's headful browser fetcher via Tailscale.
 
     Returns (html_text, final_url). Both None on failure or timeout.
@@ -200,6 +228,12 @@ async def _residential_fetch_html(url: str) -> tuple[str | None, str | None]:
     """
     if not RESIDENTIAL_FETCHER_URL:
         return None, None
+
+    fetch_timeout = (
+        timeout_override
+        if timeout_override is not None
+        else RESIDENTIAL_FETCHER_TIMEOUT
+    )
 
     fetch_endpoint = (
         RESIDENTIAL_FETCHER_URL.rstrip("/").replace("/health", "") + "/fetch"
@@ -214,7 +248,7 @@ async def _residential_fetch_html(url: str) -> tuple[str | None, str | None]:
                 fetch_endpoint,
                 json={"url": url},
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=RESIDENTIAL_FETCHER_TIMEOUT),
+                timeout=aiohttp.ClientTimeout(total=fetch_timeout),
             ) as response:
                 if response.status != 200:
                     logger.warning(
@@ -575,6 +609,7 @@ async def fetch_metadata(
     text_snippet: str = "",
     session: aiohttp.ClientSession | None = None,
     enable_screenshot: bool = True,
+    deadline: float | None = None,
 ) -> Dict[str, Any]:
     """
     Fetch metadata from a URL, prefer social tags, and fall back to screenshots/images.
@@ -582,6 +617,10 @@ async def fetch_metadata(
     Description priority: OG → Twitter → standard meta description → JSON-LD → first
     substantial paragraph → HN/story text snippet → friendly domain copy.
     Image priority: OG/Twitter image download → browser screenshot → placeholder.
+
+    ``deadline`` is a monotonic timestamp. If None, defaults to now +
+    METADATA_DEADLINE_SECONDS. Each fallback stage checks remaining time and
+    bails to the next cheaper stage when the budget is exhausted.
     """
     cached_metadata = get_cached_metadata(url)
     if should_use_cached_metadata(cached_metadata):
@@ -610,6 +649,8 @@ async def fetch_metadata(
         return metadata
 
     logger.info("Fetching metadata for %s", url)
+    if deadline is None:
+        deadline = time.monotonic() + METADATA_DEADLINE_SECONDS
     fallback_description = build_fallback_description(url, text_snippet)
     description = fallback_description
     image_filename = None
@@ -640,7 +681,9 @@ async def fetch_metadata(
     owns_session = session is None
     if owns_session:
         # Layer 1: curl_cffi (Chrome TLS) + Layer 2 residential fetcher fallback.
-        html, cffi_final_url = await _curl_cffi_fetch_html(url, headers)
+        html, cffi_final_url = await _curl_cffi_fetch_html(
+            url, headers, deadline=deadline
+        )
         if cffi_final_url:
             final_url = cffi_final_url
     else:
@@ -735,7 +778,7 @@ async def fetch_metadata(
     # When the original page is anti-bot blocked (no HTML, no og:image), try
     # the Wayback Machine archive. Cached pages still contain the original
     # og:image meta tags and are not behind the same bot protection.
-    if not og_image_url and not html:
+    if not og_image_url and not html and time.monotonic() < deadline:
         wb_html, wb_url = await _wayback_fetch_html(url)
         if wb_html:
             description = extract_description_from_html(wb_html, fallback_description)
@@ -754,10 +797,24 @@ async def fetch_metadata(
                         og_image_url = "https://" + og_image_url
                 logger.info("Using wayback og:image for %s", url)
 
-    if not og_image_url and ENABLE_SCREENSHOT_FALLBACK and enable_screenshot:
+    if (
+        not og_image_url
+        and ENABLE_SCREENSHOT_FALLBACK
+        and enable_screenshot
+        and time.monotonic() < deadline
+    ):
         if is_public_http_url(final_url):
-            logger.info("Attempting screenshot fallback for %s", final_url)
-            image_filename = await capture_screenshot_with_timeout(final_url)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning(
+                    "Metadata deadline exhausted before screenshot for %s", url
+                )
+            else:
+                screenshot_timeout = min(SCREENSHOT_TIMEOUT_SECONDS, remaining)
+                logger.info("Attempting screenshot fallback for %s", final_url)
+                image_filename = await capture_screenshot_with_timeout(
+                    final_url, timeout_override=screenshot_timeout
+                )
             if image_filename:
                 logger.info(
                     "Successfully captured screenshot fallback for %s", final_url
@@ -819,11 +876,33 @@ async def download_and_resize_image(
                     timeout=CFFI_TIMEOUT,
                     verify=True,
                 ) as cffi_session:
-                    response = await cffi_session.get(
-                        resolved_image_url,
-                        headers=headers,
-                        allow_redirects=True,
-                    )
+                    current_img_url = resolved_image_url
+                    response = None
+                    for _ in range(6):
+                        if not is_public_http_url(current_img_url):
+                            logger.warning(
+                                "Image redirect chain hit unsafe URL %s",
+                                current_img_url,
+                            )
+                            return None
+                        response = await cffi_session.get(
+                            current_img_url,
+                            headers=headers,
+                            allow_redirects=False,
+                        )
+                        if response.status_code in (301, 302, 303, 307, 308):
+                            location = response.headers.get("location")
+                            if not location:
+                                break
+                            current_img_url = urljoin(current_img_url, location)
+                            continue
+                        break
+                    else:
+                        logger.warning(
+                            "Too many redirects for image %s", resolved_image_url
+                        )
+                        return None
+
                     response.raise_for_status()
                     content_type = (response.headers.get("content-type") or "").lower()
                     if not content_type.startswith("image/"):
@@ -980,15 +1059,20 @@ def is_image_too_small(image_filename: str) -> bool:
         return True
 
 
-async def capture_screenshot_with_timeout(url: str) -> str | None:
+async def capture_screenshot_with_timeout(
+    url: str, timeout_override: float | None = None
+) -> str | None:
     """Run screenshot fallback without letting a wedged browser stall a scrape cycle."""
+    timeout = (
+        timeout_override if timeout_override is not None else SCREENSHOT_TIMEOUT_SECONDS
+    )
     task = asyncio.create_task(capture_screenshot(url))
     try:
-        return await asyncio.wait_for(task, timeout=SCREENSHOT_TIMEOUT_SECONDS)
+        return await asyncio.wait_for(task, timeout=timeout)
     except asyncio.TimeoutError:
         logger.error(
             "Screenshot fallback timed out after %.1fs for %s",
-            SCREENSHOT_TIMEOUT_SECONDS,
+            timeout,
             url,
         )
         task.cancel()
