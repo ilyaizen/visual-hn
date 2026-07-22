@@ -191,7 +191,7 @@ def client():
     return TestClient(main.app, raise_server_exceptions=False)
 
 
-def _mock_fetch_bytes(path: str, query: bytes = b"") -> tuple[bytes, str]:
+async def _mock_fetch_bytes(path: str, query: bytes = b"") -> tuple[bytes, str]:
     """Fake upstream that returns deterministic content per path."""
     if path == "api/timeline":
         return (json.dumps({"stories": [], "count": 0}).encode(), "application/json")
@@ -202,7 +202,7 @@ def _mock_fetch_bytes(path: str, query: bytes = b"") -> tuple[bytes, str]:
     return (b"<html>ok</html>", "text/html")
 
 
-def _mock_fetch_html(query: bytes = b"") -> str:
+async def _mock_fetch_html(query: bytes = b"") -> str:
     return SAMPLE_HCKER_HTML
 
 
@@ -216,7 +216,7 @@ def test_root_returns_injected_html(client):
 
 
 def test_root_upstream_failure_returns_502(client):
-    def _fail(query: bytes = b""):
+    async def _fail(query: bytes = b""):
         raise ConnectionError("upstream down")
 
     with patch.object(hcker_proxy, "fetch_hcker_news_html", _fail):
@@ -249,7 +249,7 @@ def test_assets_proxy(client):
 
 
 def test_proxy_upstream_failure_returns_502(client):
-    def _fail(path: str, query: bytes = b""):
+    async def _fail(path: str, query: bytes = b""):
         raise ConnectionError("upstream down")
 
     with patch.object(hcker_proxy, "fetch_hcker_news_bytes", _fail):
@@ -298,7 +298,7 @@ def test_timeline_proxy_triggers_enrichment_for_missing_ids(client):
         "count": 2,
     }
 
-    def _mock_bytes(path: str, query: bytes = b""):
+    async def _mock_bytes(path: str, query: bytes = b""):
         if path == "api/timeline":
             return (json.dumps(timeline_response).encode(), "application/json")
         return (b"{}", "application/json")

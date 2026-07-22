@@ -12,6 +12,10 @@ layers run before the screenshot is taken:
    (``##.cookie-banner`` etc.) injected as a stylesheet for first-party /
    inline banners that aren't loaded from a blockable domain.
 
+A persistent browser singleton is reused across screenshots — each call gets
+its own isolated context with its own route handler. This eliminates the 2-5s
+Chrome process spawn overhead per screenshot.
+
 Output contract matches the old Selenium path: saves a JPEG to
 ``static/images/{hash}_screenshot.jpg`` and returns the filename, or None.
 """
@@ -49,11 +53,66 @@ SCREENSHOT_UA = (
     "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 )
 
-# One browser at a time — the screenshot path is a worst-case fallback, not
-# the hot path, and Playwright browsers are heavyweight to spin up concurrently.
+# One screenshot at a time — Playwright contexts are lightweight but the
+# screenshot path is a worst-case fallback, not the hot path.
 screenshot_lock = asyncio.Lock()
 
 _COSMETIC_CSS = filter_lists.get_cosmetic_css()
+
+# --- Browser singleton ---
+_browser: object | None = None  # playwright.async_api.Browser
+_playwright: object | None = None  # playwright.async_api.Playwright
+_browser_lock = asyncio.Lock()
+
+
+async def _get_browser():
+    """Return the shared browser singleton, launching it if needed.
+
+    The browser process persists across screenshot calls. Each screenshot
+    creates its own context (isolated cookies, route handlers, viewport).
+    Auto-relaunches if the process crashed.
+    """
+    global _browser, _playwright
+    if _browser and _browser.is_connected():
+        return _browser
+    async with _browser_lock:
+        if _browser and _browser.is_connected():
+            return _browser
+        if _browser:
+            logger.warning("Screenshot browser disconnected — relaunching")
+            with suppress(Exception):
+                await _browser.close()
+            _browser = None
+            with suppress(Exception):
+                await _playwright.stop()
+            _playwright = None
+
+        from playwright.async_api import async_playwright
+
+        _playwright = await async_playwright().start()
+        _browser = await _playwright.chromium.launch(
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
+            ]
+        )
+        logger.info("Screenshot browser singleton launched")
+        return _browser
+
+
+async def shutdown_browser():
+    """Clean shutdown of the browser singleton. Call on app shutdown."""
+    global _browser, _playwright
+    if _browser:
+        with suppress(Exception):
+            await _browser.close()
+    if _playwright:
+        with suppress(Exception):
+            await _playwright.stop()
+    _browser = None
+    _playwright = None
 
 
 def is_image_too_small(image_filename: str) -> bool:
@@ -79,86 +138,89 @@ async def capture_screenshot(url: str) -> str | None:
     cosmetic stylesheet hides inline banners. Saves a resized JPEG and returns
     the filename, or None on failure.
     """
-    from playwright.async_api import async_playwright, Error as PlaywrightError
+    from playwright.async_api import Error as PlaywrightError
 
     async with screenshot_lock:
         image_filename: str | None = None
+        context = None
         try:
-            async with async_playwright() as pw:
-                browser = await pw.chromium.launch(
-                    args=[
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                        "--disable-blink-features=AutomationControlled",
-                    ]
-                )
-                context = await browser.new_context(
-                    user_agent=SCREENSHOT_UA,
-                    viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
-                )
-                await context.add_init_script(
-                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-                )
-                page = await context.new_page()
+            browser = await _get_browser()
+            context = await browser.new_context(
+                user_agent=SCREENSHOT_UA,
+                viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+            )
+            await context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
+            page = await context.new_page()
 
-                # Layer 1: abort requests to cookie-consent / annoyance domains
-                async def _block_route(route):
-                    if filter_lists.is_blocked_url(route.request.url):
-                        await route.abort()
-                    else:
-                        await route.continue_()
+            # Layer 1: abort requests to cookie-consent / annoyance domains
+            # + SSRF guard: block redirects to private/internal targets
+            async def _block_route(route):
+                req_url = route.request.url
+                if filter_lists.is_blocked_url(req_url):
+                    await route.abort()
+                    return
+                # SSRF: validate every navigation/request target
+                from urllib.parse import urlparse
 
-                await page.route("**/*", _block_route)
+                parsed = urlparse(req_url)
+                host = (parsed.hostname or "").lower()
+                if (
+                    host in {"localhost", "localhost.localdomain"}
+                    or host.endswith(".local")
+                    or host.startswith("127.")
+                    or host.startswith("10.")
+                    or host.startswith("192.168.")
+                    or host.startswith("169.254.")
+                ):
+                    logger.warning("Screenshot route blocked SSRF target: %s", req_url)
+                    await route.abort()
+                    return
+                await route.continue_()
 
-                response = None
+            await page.route("**/*", _block_route)
+
+            response = None
+            try:
+                response = await page.goto(
+                    url, wait_until="domcontentloaded", timeout=35_000
+                )
+            except PlaywrightError as exc:
+                logger.warning("Page load issue for %s: %s", url, exc)
+
+            if response is not None and not response.ok:
+                logger.warning(
+                    "Skipping screenshot for %s — HTTP %d (non-2xx)",
+                    url,
+                    response.status,
+                )
+                await context.close()
+                return None
+
+            # Layer 2: hide inline / first-party banners via CSS
+            if _COSMETIC_CSS:
                 try:
-                    # "domcontentloaded" mirrors the old Selenium "eager"
-                    # strategy: don't wait for every stylesheet/image/ad
-                    # request. Some pages stall on subresources long after
-                    # the useful content is painted.
-                    response = await page.goto(
-                        url, wait_until="domcontentloaded", timeout=35_000
-                    )
+                    await page.add_style_tag(content=_COSMETIC_CSS)
                 except PlaywrightError as exc:
-                    logger.warning("Page load issue for %s: %s", url, exc)
-                    # Continue anyway — the page may have painted enough to
-                    # screenshot even if navigation timed out.
+                    logger.debug("Failed to inject cosmetic CSS for %s: %s", url, exc)
 
-                # Guard: only screenshot when we actually entered the story.
-                # Non-2xx responses are forbidden/blank/error pages — capturing
-                # them produces useless images. response is None on timeout
-                # (page may still have content, so we let those through).
-                if response is not None and not response.ok:
-                    logger.warning(
-                        "Skipping screenshot for %s — HTTP %d (non-2xx)",
-                        url,
-                        response.status,
-                    )
-                    await browser.close()
-                    return None
-
-                # Layer 2: hide inline / first-party banners via CSS
-                if _COSMETIC_CSS:
-                    try:
-                        await page.add_style_tag(content=_COSMETIC_CSS)
-                    except PlaywrightError as exc:
-                        logger.debug(
-                            "Failed to inject cosmetic CSS for %s: %s", url, exc
-                        )
-
-                # Brief settle for late-rendered overlays the CSS didn't catch
-                await asyncio.sleep(1.5)
-
-                screenshot_png = await page.screenshot(type="png", full_page=False)
-                await browser.close()
+            await asyncio.sleep(1.5)
+            screenshot_png = await page.screenshot(type="png", full_page=False)
+            await context.close()
         except PlaywrightError as exc:
             logger.error("Playwright screenshot error for %s: %s", url, exc)
+            if context:
+                with suppress(Exception):
+                    await context.close()
             return None
         except Exception as exc:
             logger.error(
                 "Unexpected screenshot error for %s: %s", url, exc, exc_info=True
             )
+            if context:
+                with suppress(Exception):
+                    await context.close()
             return None
 
         # --- Save + resize (same logic as the old Selenium path) ---

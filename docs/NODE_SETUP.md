@@ -8,11 +8,6 @@
 
 ## One-time setup
 
-**Prerequisite:** Google Chrome must be installed in the default location
-(`C:\Program Files\Google\Chrome\Application\chrome.exe`). Unlike the old
-Playwright setup which downloaded a bundled Chromium, nodriver drives the
-**real system Chrome** — this is core to its anti-detection capability.
-
 ```powershell
 cd D:\GitHub\visual-hn
 
@@ -20,11 +15,12 @@ cd D:\GitHub\visual-hn
 python -m venv .node-venv
 .\.node-venv\Scripts\Activate.ps1
 
-# Install dependencies (nodriver replaces playwright + the Win32 ctypes stack)
-pip install fastapi uvicorn nodriver
-```
+# Install dependencies
+pip install fastapi uvicorn playwright
 
-No `playwright install chromium` step — nodriver uses the system Chrome binary.
+# Install Playwright's bundled Chromium
+python -m playwright install chromium
+```
 
 If you get a PowerShell execution policy error when activating the venv:
 
@@ -48,27 +44,19 @@ python residential_fetcher.py
 ```
 
 The browser runs **headless** — no visible window, no taskbar button, no focus
-stealing. It uses [nodriver](https://github.com/ultrafunkamsterdam/nodriver)
-(undetected-chromedriver successor) to drive the real system Chrome via CDP,
-which auto-passes most Cloudflare managed challenges. Cookies (including
-`cf_clearance`) are preserved in the profile across restarts.
+stealing. It uses [Playwright](https://playwright.dev/) to drive a bundled
+Chromium, which auto-passes most Cloudflare managed challenges.
 
-When Cloudflare throws an interactive challenge that nodriver can't auto-solve,
-the fetcher tries to find and click the "verify you are human" checkbox
-programmatically (nodriver's `find()` searches iframes). If it doesn't resolve
-within `CF_CHALLENGE_MAX_WAIT` seconds, the fetch returns an error and the VPS
-falls through to Wayback → screenshot → favicon composite.
-
-The browser profile lives at `.browser-profile/` next to the script (override
-with `RESIDENTIAL_FETCHER_PROFILE`). It persists cookies and localStorage
-between restarts.
+When Cloudflare throws an interactive challenge, the fetcher searches all
+frames for the "verify you are human" checkbox and clicks it. If it doesn't
+resolve within `CF_CHALLENGE_MAX_WAIT` seconds, the fetch returns an error
+and the VPS falls through to Wayback → screenshot → favicon composite.
 
 | Env var                          | Default                  | Purpose                                        |
 | -------------------------------- | ------------------------ | ---------------------------------------------- |
 | `RESIDENTIAL_FETCHER_PORT`       | `8765`                   | Port to listen on                              |
-| `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_             | Shared secret matching the VPS                 |
-| `CF_CHALLENGE_MAX_WAIT`          | `60`                     | Seconds to wait for headless CF auto-solve   |
-| `RESIDENTIAL_FETCHER_PROFILE`    | `.browser-profile/`      | Chromium user-data dir (cookie persistence)    |
+| `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_             | Shared secret matching the VPS (min 24 chars)  |
+| `CF_CHALLENGE_MAX_WAIT`          | `60`                     | Seconds to wait for headless CF auto-solve     |
 
 ## Auto-start on login + watchdog (Task Scheduler)
 

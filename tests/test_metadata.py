@@ -96,7 +96,9 @@ def test_screenshot_fallback_is_enabled_by_default_for_story_images():
 
 
 def test_metadata_cache_is_bounded_lru(monkeypatch):
-    monkeypatch.setattr(metadata, "METADATA_CACHE_MAX_ITEMS", 2)
+    import metadata.cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "METADATA_CACHE_MAX_ITEMS", 2)
     metadata.metadata_cache.clear()
 
     metadata.cache_metadata("https://example.com/1", {"description": "one"})
@@ -342,6 +344,8 @@ def test_is_public_http_url_rejects_private_and_local_targets():
     assert not metadata.is_public_http_url("http://localhost/story")
     assert not metadata.is_public_http_url("https://127.0.0.1/story")
     assert not metadata.is_public_http_url("https://192.168.1.10/story")
+    assert not metadata.is_public_http_url("https://100.64.0.1/story")
+    assert not metadata.is_public_http_url("https://169.254.169.254/latest/meta-data/")
     assert metadata.is_public_http_url("https://example.com/story")
 
 
