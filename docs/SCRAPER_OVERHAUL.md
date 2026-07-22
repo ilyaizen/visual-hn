@@ -1,6 +1,6 @@
 # Visual-HN Scraper Overhaul Plan
 
-> Created: 2026-07-22 · Status: **DRAFT** · Owner: Ilya
+> Created: 2026-07-22 · Status: **IMPLEMENTED** · Owner: Ilya
 >
 > Scope: `residential_fetcher.py`, `screenshot.py`, `metadata.py`, `hcker_proxy.py`
 > Out of scope: `hn_scraper.py` (working), `feed_enrichment.py` (working), `database.py`, frontend
