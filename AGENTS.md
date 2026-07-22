@@ -69,14 +69,33 @@ Define success. Loop until verified.
 
 Multi-step → state plan: `[step] → verify: [check]`.
 
-## 5. Testing / Committing
+## 5. Branching, Checks, Commits
 
-DO NOT run checks. ALWAYS ASK USER for explicit confirmation before running any verification, linting, type-check, or build commands.
+### Always work on a new branch
 
-DO NOT commit changes without explicit user confirmation. Before ending a task, ask whether to run checks and commit. If the user confirms committing, generate a suitable [Conventional Commits](https://www.conventionalcommits.org/) message that summarizes the diff concisely.
+Before making any changes, create a branch from `main`:
+
+```bash
+git checkout main && git pull && git checkout -b <descriptive-name>
+```
+
+Never commit directly to `main`. Every task gets its own branch.
+
+### Checks and commits — run freely
+
+Run checks (`black .`, `pytest`) and commit as you go. No need to ask. Use [Conventional Commits](https://www.conventionalcommits.org/) messages.
 
 1. `black .` — Python formatting.
 2. `pytest` — run all tests.
+
+### Push / publish / PR — ask first
+
+**Always** get explicit user confirmation before:
+- `git push` (any remote)
+- Opening a PR (`gh pr create`)
+- Publishing or deploying anything
+
+Commit locally all you want. Ask before it leaves the machine.
 
 ## Efficiency
 
