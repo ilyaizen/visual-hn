@@ -1,4 +1,3 @@
-# --- START OF FILE hn_scraper.py ---
 import asyncio
 import gc
 import time
@@ -220,6 +219,3 @@ async def start_scraper() -> None:
             )
         logger.info("Scraping cycle finished. Sleeping for 15 minutes.")
         await asyncio.sleep(900)  # Sleep for 15 minutes
-
-
-# --- END OF FILE hn_scraper.py ---

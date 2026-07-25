@@ -10,15 +10,15 @@ Visual-HN — HN w/ pics. FastAPI app that proxies hcker.news, adds preview imag
 
 This project runs across **two machines**. Code runs in both places; commands are not portable.
 
-|              | VPS (proxy + scraper)                                     | Residential node (Cloudflare bypass)                                                                                  |
-| ------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **OS**       | Ubuntu 24.04 (Hetzner CX32)                               | Windows 11 (residential laptop)                                                                                       |
-| **Hostname** | *(see internal docs)*                                     | *(see internal docs)*                                                                                                 |
-| **Shell**    | bash                                                      | PowerShell 7                                                                                                          |
-| **Network**  | DC IP + Tailscale *(internal)*                            | Residential IP + Tailscale *(internal)*                                                                               |
+|              | VPS (proxy + scraper)                                     | Residential node (Cloudflare bypass)                                                                                |
+| ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **OS**       | Ubuntu 24.04 (Hetzner CX32)                               | Windows 11 (residential laptop)                                                                                     |
+| **Hostname** | *(see internal docs)*                                     | *(see internal docs)*                                                                                               |
+| **Shell**    | bash                                                      | PowerShell 7                                                                                                        |
+| **Network**  | DC IP + Tailscale *(internal)*                            | Residential IP + Tailscale *(internal)*                                                                             |
 | **Runs**     | `main.py` (FastAPI proxy + scraper) as systemd service    | `residential_fetcher.py` (headless Chrome via Playwright) via Task Scheduler                                        |
-| **Service**  | `visual-hn.service` (`systemctl start/stop/restart`)    | `VHN-ResidentialFetcher` scheduled task                                                                |
-| **Venv**     | `.venv` (Python 3.10+)                                    | `.node-venv` (Python 3.11+)                                                                           |
+| **Service**  | `visual-hn.service` (`systemctl start/stop/restart`)      | `VHN-ResidentialFetcher` scheduled task                                                                             |
+| **Venv**     | `.venv` (Python 3.10+)                                    | `.node-venv` (Python 3.11+)                                                                                         |
 | **Role**     | Owns the DB, serves the public site, owns the scrape loop | Called by VPS only when curl_cffi gets 403/429/503 — solves CF JS challenges via real Chrome (Playwright, headless) |
 
 **Commands are not interchangeable.** A `systemctl restart` does nothing on Windows; `Start-ScheduledTask` does nothing on the VPS. When a command in this file looks wrong for the machine you're on, check which environment you're in before assuming the doc is stale.
@@ -45,19 +45,6 @@ Min code that solve problem. Nothing speculative.
 - 200 lines could be 50 → rewrite.
 
 Test: senior eng call this overcomplicated? Yes → simplify.
-
-## Surgical Changes
-
-Touch only what must. Clean only own mess.
-
-- No "improve" adjacent code/comments/format.
-- No refactor things not broken.
-- Match existing style even if disagree.
-- Unrelated dead code → mention, no delete.
-- Own changes orphan imports/vars → remove.
-- Pre-existing dead code → leave unless asked.
-
-Test: every changed line trace to user request.
 
 ## Goal-Driven Execution
 
@@ -233,7 +220,6 @@ black .
 - Pydantic for validation, SQLAlchemy ORM for persistence
 
 <!-- rtk-instructions v2 -->
-
 ## RTK (Rust Token Killer) - Token-Optimized Commands
 
 ## Golden Rule
@@ -350,5 +336,4 @@ rtk kubectl logs        # Deduplicated pod logs
 rtk curl <url>          # Compact HTTP responses (70%)
 rtk wget <url>          # Compact download output (65%)
 ```
-
 <!-- /rtk-instructions -->

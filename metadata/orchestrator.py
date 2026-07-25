@@ -39,7 +39,6 @@ from .fetcher import (
     MAX_HTML_BYTES,
     SCREENSHOT_TIMEOUT_SECONDS,
     METADATA_DEADLINE_SECONDS,
-    CFFI_TIMEOUT,
     read_response_capped,
     _curl_cffi_fetch_html,
     _wayback_fetch_html,

@@ -90,16 +90,6 @@ class _TTLCache:
     def set(self, key: str, value: Any, soft_ttl: float, hard_ttl: float) -> None:
         self._store[key] = (time.monotonic(), soft_ttl, hard_ttl, value)
 
-    def purge(self) -> None:
-        now = time.monotonic()
-        stale = [
-            k
-            for k, (created, _s, hard, _) in self._store.items()
-            if now - created > hard
-        ]
-        for k in stale:
-            del self._store[k]
-
 
 _cache = _TTLCache()
 # soft = when to re-fetch next time;  hard = absolute max age before discard
@@ -531,15 +521,7 @@ def register_routes(app) -> None:
         # changed their HTML structure), serve the raw proxy HTML rather than
         # crashing.  The page works without our injections — just no thumbnails.
         try:
-            html = inject_preview_assets(
-                rewrite_meta_tags(
-                    rewrite_proxy_header(
-                        rewrite_hcker_news_asset_urls(
-                            normalize_rocket_loader_scripts(html)
-                        )
-                    )
-                )
-            )
+            html = inject_preview_assets(rewrite_meta_tags(rewrite_proxy_header(html)))
         except Exception as exc:
             logger.warning(
                 "Injection pipeline failed (serving raw proxy HTML): %s", exc

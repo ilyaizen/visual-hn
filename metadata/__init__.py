@@ -13,7 +13,6 @@ from .safety import (
     is_public_http_url,
     source_domain,
     favicon_url,
-    _is_hn_internal_url,
 )
 
 # ── cache ──
@@ -37,7 +36,6 @@ from .parser import (
     _json_ld_description,
     _first_substantial_paragraph,
     extract_description_from_html,
-    extract_image_urls_from_html,
     extract_og_image_url,
     build_fallback_description,
 )
@@ -60,8 +58,6 @@ from .fetcher import (
     _wayback_fetch_html,
     capture_screenshot_with_timeout,
     capture_screenshot,
-    FetchFailure,
-    HtmlFetchResult,
 )
 
 # ── images ──
@@ -71,10 +67,6 @@ from .images import (
     JPEG_QUALITY,
     MIN_IMAGE_WIDTH,
     MIN_IMAGE_HEIGHT,
-    SCREENSHOT_MIN_BYTES,
-    download_and_resize_image,
-    is_image_too_small,
-    _generate_hn_card,
     _render_pdf_first_page,
     generate_favicon_composite,
 )
@@ -90,7 +82,6 @@ __all__ = [
     "is_public_http_url",
     "source_domain",
     "favicon_url",
-    "_is_hn_internal_url",
     # cache
     "metadata_cache",
     "PLACEHOLDER_IMAGE",
@@ -104,7 +95,6 @@ __all__ = [
     "truncate_description",
     "DESCRIPTION_LIMIT",
     "extract_description_from_html",
-    "extract_image_urls_from_html",
     "extract_og_image_url",
     "build_fallback_description",
     # fetcher
@@ -119,8 +109,6 @@ __all__ = [
     "capture_screenshot_with_timeout",
     "capture_screenshot",
     # images
-    "download_and_resize_image",
-    "is_image_too_small",
     "generate_favicon_composite",
     "_render_pdf_first_page",
     # orchestrator
