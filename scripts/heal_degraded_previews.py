@@ -19,9 +19,13 @@ import time
 import urllib.request
 
 DB = "/srv/apps/visual-hn/visual_hn.db"
-FETCHER = os.environ.get("VHN_RESIDENTIAL_FETCHER_URL", "http://<tailscale-ip>:8765")
-SECRET = "hello"
+FETCHER = os.environ.get("VHN_RESIDENTIAL_FETCHER_URL", "http://100.124.111.23:18080")
+SECRET = os.environ.get("VHN_RESIDENTIAL_FETCHER_SECRET", "")
 TIMEOUT = 120
+
+if not SECRET:
+    print("ERROR: VHN_RESIDENTIAL_FETCHER_SECRET not set", flush=True)
+    raise SystemExit(1)
 
 
 def extract_og_image(html):
