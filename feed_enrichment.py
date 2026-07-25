@@ -15,8 +15,8 @@ from datetime import datetime
 import aiohttp
 from sqlalchemy import select
 
-from database import async_session, init_db
-from metadata import fetch_metadata, USER_AGENT
+from database import async_session
+from metadata import fetch_metadata
 from models import Story
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,6 @@ async def enrich_missing_stories(timeline_ids: list[int]) -> None:
             logger.info("Feed enrichment: %d missing IDs to enrich", len(to_enrich))
 
         sem = asyncio.Semaphore(ENRICHMENT_CONCURRENCY)
-        headers = {"User-Agent": USER_AGENT}
 
         async def _bounded_enrich(sid: int):
             async with sem:

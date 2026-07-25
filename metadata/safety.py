@@ -98,13 +98,3 @@ def favicon_url(url: str | None) -> str:
     if not domain:
         return ""
     return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
-
-
-def _is_hn_internal_url(url: str) -> bool:
-    """True for HN post pages (Ask HN, text posts with no external URL)."""
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower()
-    return (
-        host in {"news.ycombinator.com", "www.news.ycombinator.com"}
-        and parsed.path == "/item"
-    )

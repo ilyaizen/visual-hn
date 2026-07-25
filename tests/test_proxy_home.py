@@ -101,16 +101,6 @@ def test_inject_preview_assets_cache_busts_changed_preview_runtime_scripts():
     assert f"content.js?v={hcker_proxy.PREVIEW_RUNTIME_VERSION}" in html
 
 
-def test_rewrite_hcker_news_asset_urls_keeps_root_relative_urls_for_local_proxy():
-    html = '<html><head><link href="/assets/app.css"></head><body><script src="/assets/app.js"></script><a href="/newest">new</a></body></html>'
-
-    rewritten = hcker_proxy.rewrite_hcker_news_asset_urls(html)
-
-    assert 'href="/assets/app.css"' in rewritten
-    assert 'src="/assets/app.js"' in rewritten
-    assert 'href="/newest"' in rewritten
-
-
 def test_rewrite_proxy_header_brands_reader_and_repoints_link():
     html = '<html><body><header><h1><a href="/">hcker.news</a></h1><span class="tagline">a better <a href="https://news.ycombinator.com/news">hacker news</a> reader</span></header></body></html>'
 

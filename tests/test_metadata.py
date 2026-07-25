@@ -188,42 +188,6 @@ async def test_fetch_metadata_uses_browser_headers_with_shared_session(monkeypat
     assert "text/html" in fake_session.kwargs["headers"]["Accept"]
 
 
-def test_extract_image_urls_from_html_returns_multiple_candidates_in_priority_order():
-    html = """
-    <html><head>
-      <meta property="og:image" content="/broken-og.jpg" />
-      <meta property="og:image:secure_url" content="https://cdn.example.com/secure.jpg" />
-      <meta name="twitter:image" content="twitter.jpg" />
-      <link rel="image_src" href="/fallback-link.jpg" />
-    </head><body>
-      <img src="/body-image.jpg" />
-    </body></html>
-    """
-
-    assert metadata.extract_image_urls_from_html(
-        html, "https://example.com/post/page"
-    ) == [
-        "https://example.com/broken-og.jpg",
-        "https://cdn.example.com/secure.jpg",
-        "https://example.com/post/twitter.jpg",
-        "https://example.com/fallback-link.jpg",
-        "https://example.com/body-image.jpg",
-    ]
-
-
-def test_extract_image_urls_from_html_deduplicates_candidates():
-    html = """
-    <html><head>
-      <meta property="og:image" content="/card.jpg" />
-      <meta name="twitter:image" content="https://example.com/card.jpg" />
-    </head></html>
-    """
-
-    assert metadata.extract_image_urls_from_html(html, "https://example.com/post") == [
-        "https://example.com/card.jpg"
-    ]
-
-
 def test_extract_og_image_url_picks_first_public_card_image_and_ignores_body_imgs():
     html = """
     <html><head>
@@ -246,63 +210,6 @@ def test_extract_og_image_url_skips_private_targets_and_returns_none():
 def test_extract_og_image_url_returns_none_when_no_card_image():
     html = "<html><head></head><body><img src='https://example.com/body.jpg' /></body></html>"
     assert metadata.extract_og_image_url(html, "https://example.com/post") is None
-
-
-async def test_download_and_resize_image_reads_chunked_response_until_complete(
-    monkeypatch, tmp_path
-):
-    image_buffer = BytesIO()
-    Image.new("RGB", (640, 360), "orange").save(image_buffer, format="JPEG")
-    image_bytes = image_buffer.getvalue()
-
-    class ChunkedContent:
-        def __init__(self, payload):
-            self.payload = payload
-            self.offset = 0
-
-        async def read(self, n=-1):
-            if self.offset >= len(self.payload):
-                return b""
-            chunk_size = 17 if n < 0 else min(17, n)
-            chunk = self.payload[self.offset : self.offset + chunk_size]
-            self.offset += len(chunk)
-            return chunk
-
-    class FakeResponse:
-        url = "https://cdn.example.com/card.jpg"
-        headers = {"Content-Type": "image/jpeg"}
-
-        def __init__(self):
-            self.content = ChunkedContent(image_bytes)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        def raise_for_status(self):
-            pass
-
-    class FakeSession:
-        def __init__(self):
-            self.kwargs = None
-
-        def get(self, *args, **kwargs):
-            self.kwargs = kwargs
-            return FakeResponse()
-
-    monkeypatch.setattr(metadata, "IMAGE_DIR", str(tmp_path))
-
-    fake_session = FakeSession()
-    filename = await metadata.download_and_resize_image(
-        "https://cdn.example.com/card.jpg", session=fake_session
-    )
-
-    assert fake_session.kwargs["headers"]["User-Agent"] == metadata.USER_AGENT
-    assert fake_session.kwargs["headers"]["Accept"].startswith("image/")
-    assert filename is not None
-    assert (tmp_path / filename).exists()
 
 
 def test_screenshot_capture_uses_domcontentloaded_to_avoid_waiting_for_slow_assets():
@@ -453,18 +360,3 @@ def test_template_place_badges_use_emojis_and_prioritize_points_and_comments():
     time_idx = template.index("{{ time_ago(story.time_posted) }}")
 
     assert points_idx < comments_idx < by_idx < time_idx
-
-
-def test_is_image_too_small_requires_at_least_400_px_width(tmp_path, monkeypatch):
-    from PIL import Image
-
-    monkeypatch.setattr(metadata, "IMAGE_DIR", str(tmp_path))
-
-    small_path = tmp_path / "small.jpg"
-    Image.new("RGB", (399, 600), color="white").save(small_path, "JPEG")
-
-    large_path = tmp_path / "large.jpg"
-    Image.new("RGB", (400, 600), color="white").save(large_path, "JPEG")
-
-    assert metadata.is_image_too_small("small.jpg") is True
-    assert metadata.is_image_too_small("large.jpg") is False

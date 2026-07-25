@@ -123,50 +123,10 @@ def extract_description_from_html(html: str, fallback_description: str = "") -> 
     return ""
 
 
-def extract_image_urls_from_html(html: str, base_url: str) -> list[str]:
-    """Extract and resolve social/card image candidates from page markup."""
-    soup = BeautifulSoup(html or "", "html.parser")
-    raw_candidates: list[str] = []
-    raw_candidates.extend(
-        _meta_contents(
-            soup,
-            ("property", "og:image"),
-            ("name", "og:image"),
-            ("property", "og:image:secure_url"),
-            ("name", "twitter:image"),
-            ("property", "twitter:image"),
-            ("name", "twitter:image:src"),
-        )
-    )
-
-    for link in soup.find_all("link"):
-        rel_values = [str(rel).lower() for rel in (link.get("rel") or [])]
-        if "image_src" in rel_values or "preload" in rel_values:
-            href = normalize_whitespace(link.get("href"))
-            as_value = normalize_whitespace(link.get("as")).lower()
-            if href and ("image_src" in rel_values or as_value == "image"):
-                raw_candidates.append(href)
-
-    for img in soup.find_all("img"):
-        src = normalize_whitespace(img.get("src") or img.get("data-src"))
-        if src:
-            raw_candidates.append(src)
-
-    resolved_candidates: list[str] = []
-    seen: set[str] = set()
-    for candidate in raw_candidates:
-        resolved = resolve_metadata_url(candidate, base_url)
-        if resolved and resolved not in seen:
-            seen.add(resolved)
-            resolved_candidates.append(resolved)
-    return resolved_candidates
-
-
 def extract_og_image_url(html: str, base_url: str) -> str | None:
     """Return the first public og:image/twitter:image URL, to be loaded client-side.
 
-    Unlike extract_image_urls_from_html this deliberately ignores generic <img>
-    body tags: only declared social-card images are handed to the browser, and the
+    Only declared social-card images are handed to the browser, and the
     URL is validated as public http(s) so we never expose private/SSRF targets.
     """
     soup = BeautifulSoup(html or "", "html.parser")
