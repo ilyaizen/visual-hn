@@ -385,8 +385,10 @@ async def _fetch_node_health() -> dict[str, Any]:
                     body = await resp.json()
                     result.update(body)
                     result["reachable"] = True
-                    # Normalize: 'ok' from node means node-healthy
-                    result["status"] = body.get("status", "ok")
+                    # Node returns "degraded" when the browser is idle between
+                    # fetches (lazy launch). That's a healthy state -- normalize
+                    # to "ok" so the admin page doesn't show a false alarm.
+                    result["status"] = "ok" if body.get("status") in ("ok", "degraded") else body.get("status", "ok")
                 else:
                     result["reachable"] = False
                     result["status"] = "http_error"
