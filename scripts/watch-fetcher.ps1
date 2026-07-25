@@ -9,7 +9,7 @@
 # impossible. Now we log both paths.
 
 $TaskName   = "VHN-ResidentialFetcher"
-$Port       = 8765
+$Port       = 18080
 $HealthUrl  = "http://localhost:$Port/health"
 $MaxRetries = 3
 $logPath    = Join-Path $PSScriptRoot "watch-fetcher.log"
@@ -22,7 +22,10 @@ function Log($msg) {
 function Test-FetcherHealth {
     try {
         $resp = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 5
-        return $resp.StatusCode -eq 200 -and $resp.Content -match '"status"\s*:\s*"ok"'
+        # Accept "ok" (browser connected) and "degraded" (browser idle,
+        # connects on first fetch) — both mean the server is alive and bound.
+        # Only "error" or a connection failure means unhealthy.
+        return $resp.StatusCode -eq 200 -and $resp.Content -match '"status"\s*:\s*"(ok|degraded)"'
     } catch {
         return $false
     }

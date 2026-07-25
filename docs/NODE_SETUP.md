@@ -37,8 +37,8 @@ cd D:\GitHub\visual-hn
 # Set the shared secret (must match VPS env var)
 $env:RESIDENTIAL_FETCHER_SECRET = "your-secret-here"
 
-# Optional: custom port (default 8765)
-# $env:RESIDENTIAL_FETCHER_PORT = "8765"
+# Optional: custom port (default 18080)
+# $env:RESIDENTIAL_FETCHER_PORT = "18080"
 
 python residential_fetcher.py
 ```
@@ -54,7 +54,7 @@ and the VPS falls through to Wayback → screenshot → favicon composite.
 
 | Env var                          | Default                  | Purpose                                        |
 | -------------------------------- | ------------------------ | ---------------------------------------------- |
-| `RESIDENTIAL_FETCHER_PORT`       | `8765`                   | Port to listen on                              |
+| `RESIDENTIAL_FETCHER_PORT`       | `18080`                   | Port to listen on                              |
 | `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_             | Shared secret matching the VPS (min 24 chars)  |
 | `CF_CHALLENGE_MAX_WAIT`          | `60`                     | Seconds to wait for headless CF auto-solve     |
 
@@ -79,6 +79,6 @@ Without it, if a cleaner / laptop sleep / OOM kill / accidental close kills the 
 ## Health check (from VPS or residential node)
 
 ```powershell
-curl http://<tailscale-ip>:8765/health
+curl http://<tailscale-ip>:18080/health
 # Should return: {"status":"ok"}
 ```

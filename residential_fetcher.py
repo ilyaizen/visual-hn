@@ -20,7 +20,7 @@ Requirements (residential node):
 Run:
     python residential_fetcher.py
     # or with custom port:
-    RESIDENTIAL_FETCHER_PORT=8765 python residential_fetcher.py
+    RESIDENTIAL_FETCHER_PORT=18080 python residential_fetcher.py
 
 The server listens on 0.0.0.0 so it's reachable via the Tailscale IP.
 """
@@ -46,7 +46,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PORT = int(os.environ.get("RESIDENTIAL_FETCHER_PORT", "8765"))
+PORT = int(os.environ.get("RESIDENTIAL_FETCHER_PORT", "18080"))
 SHARED_SECRET = os.environ.get("RESIDENTIAL_FETCHER_SECRET", "")
 MIN_SECRET_LENGTH = 24
 CF_SETTLE_SECONDS = 3.0

@@ -133,7 +133,7 @@ Start-ScheduledTask -TaskName 'VHN-ResidentialFetcher'
 Get-ScheduledTask -TaskName 'VHN-ResidentialFetcher*'
 
 # Health
-curl http://localhost:8765/health    # expect {"status":"ok"}
+curl http://localhost:18080/health    # expect {"status":"ok"}
 ```
 
 > **Gotcha:** `register-task.ps1 -Uninstall` in the new code unregisters `VHN-*` names, not `YAHNC-*`. Run the explicit `Unregister-ScheduledTask` lines above to clean up the legacy tasks first. After that, `-Uninstall` works as documented.

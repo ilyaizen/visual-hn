@@ -25,7 +25,7 @@ if ($wdi.NextRunTime) {
 
 # Is fetcher currently healthy?
 try {
-    $resp = Invoke-WebRequest -Uri 'http://localhost:8765/health' -UseBasicParsing -TimeoutSec 5
+    $resp = Invoke-WebRequest -Uri 'http://localhost:18080/health' -UseBasicParsing -TimeoutSec 5
     Write-Host "Fetcher /health:      $($resp.StatusCode)"
 } catch {
     Write-Host "Fetcher /health:      FAIL ($($_.Exception.Message))"

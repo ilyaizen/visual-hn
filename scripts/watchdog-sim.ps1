@@ -6,7 +6,7 @@
 
 $ErrorActionPreference = 'Continue'
 $logPath = Join-Path $PSScriptRoot 'watchdog-sim.log'
-$port    = 8765
+$port    = 18080
 $maxMin  = 12
 
 function Log($msg) {

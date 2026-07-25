@@ -16,11 +16,15 @@ import os
 import re
 import sqlite3
 import time
+import sys
 import urllib.request
 
 DB = "/srv/apps/visual-hn/visual_hn.db"
-FETCHER = os.environ.get("VHN_RESIDENTIAL_FETCHER_URL", "http://<tailscale-ip>:8765")
-SECRET = "hello"
+FETCHER = os.environ.get("VHN_RESIDENTIAL_FETCHER_URL", "http://<tailscale-ip>:18080")
+SECRET = os.environ.get("VHN_RESIDENTIAL_FETCHER_SECRET", "")
+if not SECRET:
+    print("ERROR: VHN_RESIDENTIAL_FETCHER_SECRET env var not set", file=sys.stderr)
+    sys.exit(1)
 TIMEOUT = 120
 
 

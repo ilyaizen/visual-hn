@@ -28,3 +28,4 @@ docs_internal/
 
 # Persistent Chromium profile (created by residential_fetcher.py)
 /.browser-profile
+scripts/.fetcher-secret

@@ -1,12 +1,11 @@
-# Visual-HN Residential Fetcher — launcher for Windows 11 PowerShell
+# Visual-HN Residential Fetcher -- launcher for Windows 11 PowerShell
 # Activates the venv, sets env vars, and starts residential_fetcher.py
 # Used by Task Scheduler for auto-start on login, or can be run manually
 
-# ─── Config ─── Edit these to match your residential node ───
+# --- Config --- Edit these to match your residential node ---
 $RepoDir = "C:\dev\visual-hn"
-$Secret  = "hello"
-$Port    = "8765"
-# ──────────────────────────────────────────────────
+$Port    = "18080"
+# -----------------------------------------------------------
 
 # Resolve repo directory (script may live in scripts/ subdirectory)
 if (Test-Path "$PSScriptRoot\..\residential_fetcher.py") {
@@ -16,6 +15,19 @@ if (Test-Path "$PSScriptRoot\..\residential_fetcher.py") {
 $VenvPython = "$RepoDir\.node-venv\Scripts\python.exe"
 if (-not (Test-Path $VenvPython)) {
     Write-Error "Python venv not found at $VenvPython. Run scripts\NODE_SETUP.md first."
+    exit 1
+}
+
+# Secret: read from env var, then from gitignored scripts/.fetcher-secret file.
+# The fetcher requires >= 24 chars (MIN_SECRET_LENGTH in residential_fetcher.py).
+# The VPS must send the same value via VHN_RESIDENTIAL_FETCHER_SECRET env var.
+$Secret = $env:VHN_FETCHER_SECRET
+$SecretFile = Join-Path $PSScriptRoot ".fetcher-secret"
+if (-not $Secret -and (Test-Path $SecretFile)) {
+    $Secret = (Get-Content $SecretFile -Raw).Trim()
+}
+if (-not $Secret -or $Secret.Length -lt 24) {
+    Write-Error "Fetcher secret missing or too short (< 24 chars). Set `$env:VHN_FETCHER_SECRET or create scripts\.fetcher-secret (gitignored)."
     exit 1
 }
 
