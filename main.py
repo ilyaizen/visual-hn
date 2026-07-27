@@ -388,7 +388,11 @@ async def _fetch_node_health() -> dict[str, Any]:
                     # Node returns "degraded" when the browser is idle between
                     # fetches (lazy launch). That's a healthy state -- normalize
                     # to "ok" so the admin page doesn't show a false alarm.
-                    result["status"] = "ok" if body.get("status") in ("ok", "degraded") else body.get("status", "ok")
+                    result["status"] = (
+                        "ok"
+                        if body.get("status") in ("ok", "degraded")
+                        else body.get("status", "ok")
+                    )
                 else:
                     result["reachable"] = False
                     result["status"] = "http_error"
@@ -499,26 +503,51 @@ async def admin_recent_screenshots(request: Request):
     if not _is_admin_authorized(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     from sqlalchemy import text as sa_text
+    from urllib.parse import urlparse
 
     try:
         async with async_session() as session:
             rows = (
                 await session.execute(
                     sa_text(
-                        "SELECT image_url, url, title, id"
+                        "SELECT id, image_url, og_image_url, url, title, score,"
+                        " comments_count, poster, current_position, trend, time_posted"
                         " FROM stories"
                         " WHERE image_url LIKE '%screenshot%'"
-                        " ORDER BY id DESC LIMIT 12"
+                        " ORDER BY id DESC LIMIT 24"
                     )
                 )
             ).all()
+
+            def _file_info(image_url: str | None) -> dict:
+                """Size/mtime of the on-disk capture — flags empty or stale screenshots."""
+                if not image_url:
+                    return {}
+                path = os.path.join("static/images", os.path.basename(image_url))
+                try:
+                    st = os.stat(path)
+                except OSError:
+                    return {"missing": True}
+                return {"bytes": st.st_size, "captured_at": st.st_mtime}
+
             return {
                 "screenshots": [
                     {
                         "image": r.image_url,
                         "url": r.url,
-                        "title": (r.title or "")[:80],
+                        "domain": urlparse(r.url or "").netloc or "—",
+                        "title": (r.title or "")[:120],
                         "hn_id": r.id,
+                        "score": r.score,
+                        "comments": r.comments_count,
+                        "poster": r.poster,
+                        "position": r.current_position,
+                        "trend": r.trend,
+                        "posted_at": getattr(
+                            r.time_posted, "timestamp", lambda: None
+                        )(),
+                        "has_og": bool(r.og_image_url),
+                        **_file_info(r.image_url),
                     }
                     for r in rows
                 ]
