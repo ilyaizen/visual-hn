@@ -158,6 +158,51 @@
         margin-top: 0.5rem;
       }
       .stale { opacity: 0.5; transition: opacity 0.3s; }
+
+      /* Screenshot gallery */
+      #screenshot-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.9rem;
+      }
+      .ss-thumb {
+        position: relative;
+        border: 1px solid #1e293b;
+        border-radius: 4px;
+        overflow: hidden;
+        aspect-ratio: 4/3;
+        background: #1e293b;
+      }
+      .ss-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+      .ss-thumb.suspect { border-color: #f59e0b; }
+      .ss-thumb.broken { opacity: 0.25; border-color: #ef4444; }
+      .ss-title {
+        margin: 0.35rem 0 0;
+        font-size: 0.72rem;
+        color: #e2e8f0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ss-meta {
+        margin: 0.15rem 0 0;
+        font-size: 0.66rem;
+        color: #64748b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ss-badge {
+        display: inline-block;
+        margin-right: 0.3rem;
+        padding: 0 0.3rem;
+        border-radius: 3px;
+        background: #1e293b;
+        color: #94a3b8;
+        font-size: 0.62rem;
+      }
+      .ss-badge.warn { background: #78350f; color: #fcd34d; }
+      .ss-badge.bad { background: #7f1d1d; color: #fca5a5; }
     </style>
   </head>
   <body>
@@ -333,7 +378,7 @@
       <!-- Screenshot Gallery -->
       <div class="card" style="margin-top: 1rem;">
         <p class="card-title">recent screenshots</p>
-        <div id="screenshot-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem;">
+        <div id="screenshot-grid">
           <p style="color: #64748b; font-size: 0.8rem;">loading...</p>
         </div>
       </div>
@@ -362,6 +407,12 @@
 
       function fmtNum(n) {
         return (n || 0).toLocaleString();
+      }
+
+      function esc(s) {
+        const d = document.createElement("div");
+        d.textContent = s == null ? "" : String(s);
+        return d.innerHTML.replace(/"/g, "&quot;");
       }
 
       // Render unix timestamps on load
@@ -482,13 +533,28 @@
             return;
           }
           grid.innerHTML = data.screenshots.map(function (s) {
-            return '<a href="' + s.url + '" target="_blank" rel="noopener" style="text-decoration:none">' +
-              '<div style="position: relative; border: 1px solid #1e293b; border-radius: 4px; overflow: hidden; aspect-ratio: 4/3; background: #1e293b;">' +
-              '<img src="' + s.image + '" loading="lazy" style="width:100%; height:100%; object-fit:cover;" alt="' + s.title + '" ' +
-              'onerror="this.parentElement.style.opacity=0.3; this.alt=\'failed\'" />' +
-              '</div>' +
-              '<p style="margin: 0.3rem 0 0; font-size: 0.7rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' +
-              s.title + '</p></a>';
+            // Tiny files are almost always blank/error captures — flag them loudly.
+            const suspect = s.missing || (s.bytes || 0) < 15000;
+            const badge = s.missing
+              ? '<span class="ss-badge bad">file missing</span>'
+              : (suspect ? '<span class="ss-badge warn">' + fmtBytes(s.bytes) + '</span>'
+                         : '<span class="ss-badge">' + fmtBytes(s.bytes) + '</span>');
+            const og = s.has_og ? '<span class="ss-badge">og</span>' : '';
+            const pos = s.position ? '#' + s.position : '—';
+            return '<div class="ss-cell">' +
+              '<a href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.title) + '">' +
+              '<div class="ss-thumb' + (suspect ? ' suspect' : '') + '">' +
+              '<img src="' + esc(s.image) + '" loading="lazy" alt="" ' +
+              'onerror="this.parentElement.classList.add(\'broken\')" />' +
+              '</div></a>' +
+              '<p class="ss-title">' + esc(s.title) + '</p>' +
+              '<p class="ss-meta">' + esc(s.domain) + '</p>' +
+              '<p class="ss-meta">' + pos + ' · ' + fmtNum(s.score) + ' pts · ' +
+              fmtNum(s.comments) + ' cmts · <a href="https://news.ycombinator.com/item?id=' +
+              s.hn_id + '" target="_blank" rel="noopener" style="color:#64748b">hn</a></p>' +
+              '<p class="ss-meta">shot ' + fmtTime(s.captured_at) + ' · posted ' + fmtTime(s.posted_at) + '</p>' +
+              '<p class="ss-meta">' + badge + og + '</p>' +
+              '</div>';
           }).join("");
         } catch (e) {
           console.error("screenshot poll failed", e);
