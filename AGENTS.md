@@ -107,8 +107,7 @@ python -m playwright install chromium   # for screenshot fallback
 
 ### Setup — NODE (Windows 11, residential fetcher)
 
-Follow [`docs/NODE_SETUP.md`](docs/NODE_SETUP.md). Uses Playwright with bundled
-Chromium (no system Chrome required). Summary:
+Follow [`docs/NODE_SETUP.md`](docs/NODE_SETUP.md). Uses Playwright with bundled Chromium (no system Chrome required). Summary:
 
 ```powershell
 cd D:\GitHub\visual-hn
@@ -174,41 +173,13 @@ black .
 
 ## Architecture
 
-**Entry point:** `main.py` — FastAPI app with a lifespan handler that initializes the DB and launches the background scraper as an `asyncio.create_task`.
+The scrape pipeline (`hn_scraper.py` → `metadata.py` → `database.py`) runs every 15 minutes. Gotchas the code won't tell you:
 
-**Data pipeline (runs every 15 minutes):**
-1. `hn_scraper.py` — fetches top 30 story IDs from HN Firebase API, then fetches each story's details in parallel via `asyncio.gather`
-2. `metadata.py` — for each story URL, fetches HTML and parses Open Graph tags (og:image, og:description); downloads/resizes images to max 640px JPEG; uses in-memory cache to avoid redundant fetches; has SSL-retry fallback
-3. `database.py` — maps HN API fields to model fields (`by`→`poster`, `descendants`→`comments_count`, `time`→`time_posted`), computes position trends (lower position number = higher rank, so `last_position > current_position` = "up"), persists via async SQLAlchemy
+- `database.py` renames HN API fields on the way in: `by`→`poster`, `descendants`→`comments_count`, `time`→`time_posted`.
+- Position trends are inverted: a **lower** position number is a **higher** rank, so `last_position > current_position` means `"up"`.
+- No migrations — `create_all` runs on startup, so schema changes to `models.py` need the DB recreated by hand.
 
 **Web serving / extension API:** The main consumer is the `visual-hn-previews/` project, which calls the Visual-HN API for HN w/ pics. The old web frontend is being retired. The home route should stay minimal, while the legacy frontend lives behind a two-word hidden route. Scores still need to be exposed through the Visual-HN API for the extension.
-
-**Database:** SQLite via aiosqlite + SQLAlchemy async. Schema defined in `models.py` (single `Story` table). Sessions use `async with async_session() as session:` pattern. No migrations — `create_all` on startup.
-
-**Frontend:** `templates/index.html` with Tailwind CSS (config in `tailwind.config.js` scanning `./templates/**/*.html` and `./static/**/*.js`). Auto-refreshes every 15 minutes client-side.
-
-## Repository Layout
-
-- `main.py` — FastAPI app entrypoint and lifespan setup
-- `hn_scraper.py` — fetches top stories from Hacker News
-- `metadata.py` — Open Graph parsing, image download/resize, caching
-- `database.py` — async persistence, story mapping, trend calculation
-- `models.py` — SQLAlchemy ORM models
-- `templates/index.html` — legacy page template while the frontend is being retired
-- `static/` — favicon/assets, generated CSS, images, web manifest
-- `visual-hn-previews/` — Chrome extension for hcker.news that consumes the Visual-HN API
-- `test_*.py` — async pytest coverage for database and metadata behavior
-
-## Template Layout
-
-`templates/index.html` is a single full-page layout:
-
-- root `<main>` wraps the page content with ambient background layers
-- `<header>` contains the logo, title, short description, and the stats badge area
-- `<section>` renders the story cards in a responsive 1/2-column grid
-- each card contains image/fallback, rank/trend badges, title, metadata chips, and links
-- `<footer>` only contains the GitHub link
-- bottom scripts handle cookie consent and the 15-minute auto-refresh
 
 ## Code Style
 
@@ -236,104 +207,5 @@ git add . && git commit -m "msg" && git push
 rtk git add . && rtk git commit -m "msg" && rtk git push
 ```
 
-## RTK Commands by Workflow
-
-### Build & Compile (80-90% savings)
-
-```bash
-rtk cargo build         # Cargo build output
-rtk cargo check         # Cargo check output
-rtk cargo clippy        # Clippy warnings grouped by file (80%)
-rtk tsc                 # TypeScript errors grouped by file/code (83%)
-rtk lint                # ESLint/Biome violations grouped (84%)
-rtk prettier --check    # Files needing format only (70%)
-rtk next build          # Next.js build with route metrics (87%)
-```
-
-### Test (90-99% savings)
-
-```bash
-rtk cargo test          # Cargo test failures only (90%)
-rtk vitest run          # Vitest failures only (99.5%)
-rtk playwright test     # Playwright failures only (94%)
-rtk test <cmd>          # Generic test wrapper - failures only
-```
-
-### Git (59-80% savings)
-
-```bash
-rtk git status          # Compact status
-rtk git log             # Compact log (works with all git flags)
-rtk git diff            # Compact diff (80%)
-rtk git show            # Compact show (80%)
-rtk git add             # Ultra-compact confirmations (59%)
-rtk git commit          # Ultra-compact confirmations (59%)
-rtk git push            # Ultra-compact confirmations
-rtk git pull            # Ultra-compact confirmations
-rtk git branch          # Compact branch list
-rtk git fetch           # Compact fetch
-rtk git stash           # Compact stash
-rtk git worktree        # Compact worktree
-```
-
-Git passthrough works for ALL subcommands, including ones not listed.
-
-### GitHub (26-87% savings)
-
-```bash
-rtk gh pr view <num>    # Compact PR view (87%)
-rtk gh pr checks        # Compact PR checks (79%)
-rtk gh run list         # Compact workflow runs (82%)
-rtk gh issue list       # Compact issue list (80%)
-rtk gh api              # Compact API responses (26%)
-```
-
-### JavaScript/TypeScript Tooling (70-90% savings)
-
-```bash
-rtk pnpm list           # Compact dependency tree (70%)
-rtk pnpm outdated       # Compact outdated packages (80%)
-rtk pnpm install        # Compact install output (90%)
-rtk npm run <script>    # Compact npm script output
-rtk npx <cmd>           # Compact npx command output
-rtk prisma              # Prisma without ASCII art (88%)
-```
-
-### Files & Search (60-75% savings)
-
-```bash
-rtk ls <path>           # Tree format, compact (65%)
-rtk read <file>         # Code reading with filtering (60%)
-rtk grep <pattern>      # Search grouped by file (75%)
-rtk find <pattern>      # Find grouped by directory (70%)
-```
-
-### Analysis & Debug (70-90% savings)
-
-```bash
-rtk err <cmd>           # Filter errors only from any command
-rtk log <file>          # Deduplicated logs with counts
-rtk json <file>         # JSON structure without values
-rtk deps                # Dependency overview
-rtk env                 # Environment variables compact
-rtk summary <cmd>       # Smart summary of command output
-rtk diff                # Ultra-compact diffs
-```
-
-### Infrastructure (85% savings)
-
-```bash
-rtk docker ps           # Compact container list
-rtk docker images       # Compact image list
-rtk docker logs <c>     # Deduplicated logs
-rtk kubectl get         # Compact resource list
-rtk kubectl logs        # Deduplicated pod logs
-```
-
-### Network (65-70% savings)
-
-```bash
-rtk curl <url>          # Compact HTTP responses (70%)
-rtk wget <url>          # Compact download output (65%)
-```
+Full command reference (which tools have dedicated filters, and their savings): the `rtk-commands` skill in `.claude/skills/rtk-commands/`.
 <!-- /rtk-instructions -->
