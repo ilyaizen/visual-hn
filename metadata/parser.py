@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 from bs4 import BeautifulSoup
+import re
 
 from .safety import (
     is_public_http_url,
@@ -128,6 +129,10 @@ def extract_og_image_url(html: str, base_url: str) -> str | None:
 
     Only declared social-card images are handed to the browser, and the
     URL is validated as public http(s) so we never expose private/SSRF targets.
+
+    GitHub repo og:images use S3 pre-signed URLs (repository-images.githubusercontent.com)
+    that expire in ~5 minutes.  Rewrite them to the stable opengraph.githubassets.com
+    form so the image stays valid long after the scrape.
     """
     soup = BeautifulSoup(html or "", "html.parser")
     candidates = _meta_contents(
@@ -149,8 +154,35 @@ def extract_og_image_url(html: str, base_url: str) -> str | None:
     for candidate in candidates:
         resolved = resolve_metadata_url(candidate, base_url)
         if resolved and is_public_http_url(resolved):
+            resolved = _stabilize_github_repo_image(resolved, base_url)
             return resolved
     return None
+
+
+_GITHUB_REPO_IMAGE_RE = re.compile(
+    r"^https://repository-images\.githubusercontent\.com/"
+)
+_GITHUB_REPO_URL_RE = re.compile(
+    r"^https://github\.com/([^/]+)/([^/]+?)(?:/|$)"
+)
+
+
+def _stabilize_github_repo_image(og_url: str, page_url: str) -> str:
+    """Convert an expiring GitHub repo-image URL to a stable opengraph URL.
+
+    GitHub sets og:image to repository-images.githubusercontent.com/... with S3
+    signed params (X-Amz-Expires=300).  These expire in 5 minutes.  The stable
+    equivalent is opengraph.githubassets.com/1/{owner}/{repo}.
+
+    Only applies when the page URL is a github.com/{owner}/{repo} link.
+    """
+    if not _GITHUB_REPO_IMAGE_RE.match(og_url):
+        return og_url
+    m = _GITHUB_REPO_URL_RE.match(page_url)
+    if not m:
+        return og_url
+    owner, repo = m.group(1), m.group(2)
+    return f"https://opengraph.githubassets.com/1/{owner}/{repo}"
 
 
 def build_fallback_description(url: str, text_snippet: str = "") -> str:
