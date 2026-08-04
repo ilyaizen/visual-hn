@@ -96,7 +96,15 @@ def _browser_is_alive() -> bool:
     if not _browser:
         return False
     try:
-        return _browser._browser.is_connected()
+        # _browser is a BrowserContext (from launch_persistent_context).
+        # Use the public .browser property to reach the underlying Browser
+        # and check its connection state. The old code accessed a private
+        # _browser attribute that doesn't exist on BrowserContext, so this
+        # always raised AttributeError → returned False → health reported
+        # "degraded" forever and _ensure_browser tore down + relaunched the
+        # browser on every single /fetch call.
+        browser = _browser.browser
+        return browser is not None and browser.is_connected()
     except Exception:
         return False
 
