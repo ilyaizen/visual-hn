@@ -16,7 +16,7 @@
         color: #e2e8f0;
         padding: 2rem 1rem;
       }
-      .wrap { max-width: 52rem; margin: 0 auto; }
+      .wrap { max-width: 56rem; margin: 0 auto; }
 
       /* Header */
       h1 {
@@ -79,6 +79,31 @@
       .dot.ok { background: #22c55e; }
       .dot.bad { background: #ef4444; }
       .dot.warn { background: #f59e0b; }
+
+      /* Status hero — big functional/impact summary */
+      .hero {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 0;
+      }
+      .hero-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        font-size: 1.5rem;
+      }
+      .hero-icon.ok { background: #052e16; border: 1px solid #1b4332; }
+      .hero-icon.bad { background: #450a0a; border: 1px solid #7f1d1d; }
+      .hero-icon.warn { background: #422006; border: 1px solid #78350f; }
+      .hero-icon.muted { background: #1e293b; border: 1px solid #334155; }
+      .hero-text { flex: 1; min-width: 0; }
+      .hero-title { font-size: 1rem; font-weight: 600; color: #f1f5f9; margin: 0; }
+      .hero-sub { font-size: 0.8rem; color: #94a3b8; margin: 0.2rem 0 0; }
 
       /* Bar chart */
       .bar-wrap {
@@ -159,6 +184,17 @@
       }
       .stale { opacity: 0.5; transition: opacity 0.3s; }
 
+      /* Two-column layout for node + fallback cards */
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      @media (max-width: 768px) {
+        .grid-2 { grid-template-columns: 1fr; }
+      }
+
       /* Screenshot gallery */
       #screenshot-grid {
         display: grid;
@@ -172,6 +208,7 @@
         overflow: hidden;
         aspect-ratio: 4/3;
         background: #1e293b;
+        cursor: zoom-in;
       }
       .ss-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
       .ss-thumb.suspect { border-color: #f59e0b; }
@@ -203,6 +240,155 @@
       }
       .ss-badge.warn { background: #78350f; color: #fcd34d; }
       .ss-badge.bad { background: #7f1d1d; color: #fca5a5; }
+
+      /* ── Lightbox (ported from extension content.js) ── */
+      .vhn-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: none;
+        background: rgba(0, 0, 0, 0.88);
+        touch-action: none;
+        user-select: none;
+        cursor: grab;
+        overflow: hidden;
+      }
+      .vhn-modal.vhn-open { display: block; }
+      .vhn-modal.vhn-dragging { cursor: grabbing; }
+      .vhn-modal-stage {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .vhn-modal-img {
+        position: absolute;
+        max-width: none;
+        max-height: none;
+        will-change: transform;
+        pointer-events: none;
+        background: #ffffff;
+        border-radius: 4px;
+      }
+      .vhn-modal-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 13px;
+        line-height: 1.4;
+        color: #eee;
+        pointer-events: auto;
+      }
+      .vhn-modal-info {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .vhn-modal-text {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .vhn-modal-title {
+        font-weight: 600;
+        font-size: 16px;
+        color: #fff;
+        text-decoration: underline;
+        text-decoration-color: rgba(255, 255, 255, 0.35);
+        text-underline-offset: 3px;
+        line-height: 1.3;
+        word-break: break-word;
+      }
+      .vhn-modal-title:hover {
+        text-decoration-color: #fdba74;
+        color: #fdba74;
+      }
+      .vhn-modal-desc {
+        font-size: 12px;
+        color: #aaa;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .vhn-modal-desc:empty { display: none; }
+      .vhn-modal-zoom {
+        flex: none;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 3px;
+      }
+      .vhn-zoom-btn {
+        cursor: pointer;
+        border: 0;
+        border-radius: 6px;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.7);
+        background: transparent;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .vhn-zoom-btn:hover {
+        background: rgba(255, 255, 255, 0.18);
+        color: #fff;
+      }
+      .vhn-zoom-btn svg {
+        width: 17px;
+        height: 17px;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+      .vhn-modal-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 1;
+        cursor: pointer;
+        border: 0;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(6px);
+        transition: background 0.15s ease;
+      }
+      .vhn-modal-close:hover { background: rgba(255, 255, 255, 0.2); }
+      .vhn-modal-close svg {
+        width: 16px;
+        height: 16px;
+        stroke: #fff;
+        stroke-width: 2;
+        stroke-linecap: round;
+        fill: none;
+      }
     </style>
   </head>
   <body>
@@ -233,73 +419,108 @@
         </div>
       </div>
 
-      <!-- Node Health -->
-      <div class="card" id="node-card">
-        <p class="card-title">residential node</p>
-        <div class="row">
-          <span class="label">status</span>
-          <span class="value" id="node-status">
-            <span class="dot {% if node.get('reachable') %}ok{% elif node.get('status') == 'not_configured' %}warn{% else %}bad{% endif %}"></span>
-            {{ node.get("status", "unknown") }}
-          </span>
-        </div>
-        {% if node.get("reachable") %}
-        <div class="row">
-          <span class="label">browser</span>
-          <span class="value" id="node-browser">
-            <span class="dot {% if node.get('browser_connected') %}ok{% else %}bad{% endif %}"></span>
-            {{ "connected" if node.get("browser_connected") else "disconnected" }}
-          </span>
-        </div>
-        <div class="row">
-          <span class="label">user agent</span>
-          <span class="value" style="font-size: 0.78rem">{{ node.get("user_agent", "—") }}</span>
-        </div>
-        <div class="row">
-          <span class="label">cf challenge wait</span>
-          <span class="value">{{ node.get("cf_challenge_max_wait", "—") }}s</span>
+      <div class="grid-2">
+        <!-- Residential Node -->
+        <div class="card" id="node-card">
+          <p class="card-title">residential node</p>
+          <div class="hero" id="node-hero">
+            <div class="hero-icon warn" id="node-hero-icon">⏳</div>
+            <div class="hero-text">
+              <p class="hero-title" id="node-hero-title">checking…</p>
+              <p class="hero-sub" id="node-hero-sub">probing residential fetcher</p>
+            </div>
+          </div>
+          <div id="node-detail-rows" style="margin-top: 0.5rem;">
+            <div class="row">
+              <span class="label">endpoint</span>
+              <span class="value" style="font-size: 0.78rem">{{ node.get("url", "—") }}</span>
+            </div>
+            {% if node.get("reachable") %}
+            <div class="row">
+              <span class="label">browser</span>
+              <span class="value" id="node-browser">
+                <span class="dot {% if node.get('browser_connected') %}ok{% else %}bad{% endif %}"></span>
+                {{ "connected" if node.get("browser_connected") else "disconnected" }}
+              </span>
+            </div>
+            <div class="row">
+              <span class="label">user agent</span>
+              <span class="value" style="font-size: 0.78rem">{{ node.get("user_agent", "—") }}</span>
+            </div>
+            <div class="row">
+              <span class="label">cf challenge wait</span>
+              <span class="value">{{ node.get("cf_challenge_max_wait", "—") }}s</span>
+            </div>
+
+            {% set lf = node.get("last_fetch") %}
+            {% if lf %}
+            <div class="row">
+              <span class="label">last fetch</span>
+              <span class="value" id="node-last-fetch-status">{{ lf.get("status", "—") }}</span>
+            </div>
+            <div class="row">
+              <span class="label">last url</span>
+              <span class="value" style="font-size: 0.78rem; max-width: 24rem" id="node-last-url">{{ lf.get("url") or "—" }}</span>
+            </div>
+            {% if lf.get("at") %}
+            <div class="row">
+              <span class="label">last activity</span>
+              <span class="value" id="node-last-activity">{{ lf.get("at") }}</span>
+            </div>
+            {% endif %}
+            {% if lf.get("bytes") %}
+            <div class="row">
+              <span class="label">last fetch size</span>
+              <span class="value">{{ (lf.get("bytes", 0) / 1024)|round(0)|int }} KB</span>
+            </div>
+            {% endif %}
+            {% if lf.get("error") %}
+            <div class="row">
+              <span class="label">last error</span>
+              <span class="value" style="color: #fca5a5; font-size: 0.78rem">{{ lf.get("error") }}</span>
+            </div>
+            {% endif %}
+            {% endif %}
+            {% elif node.get("configured") %}
+            <div class="row">
+              <span class="label">detail</span>
+              <span class="value" id="node-detail">{{ node.get("detail", "—") }}</span>
+            </div>
+            {% else %}
+            <div class="row">
+              <span class="label">detail</span>
+              <span class="value" id="node-detail">{{ node.get("detail", "—") }}</span>
+            </div>
+            {% endif %}
+          </div>
         </div>
 
-        {% set lf = node.get("last_fetch") %}
-        {% if lf %}
-        <div class="row">
-          <span class="label">last fetch</span>
-          <span class="value" id="node-last-fetch-status">{{ lf.get("status", "—") }}</span>
+        <!-- Fallback Layer Breakdown -->
+        <div class="card" id="fallback-card">
+          <p class="card-title">image resolution — last cycle</p>
+          <div id="fallback-bar-wrap">
+            <div class="bar-wrap" id="fallback-bar">
+              <div class="bar-segment" style="background:#3b82f6; width:100%">&nbsp;</div>
+            </div>
+            <div class="legend" id="fallback-legend">
+              <span class="legend-item" style="color:#64748b">waiting for data…</span>
+            </div>
+          </div>
+          <div style="margin-top: 0.75rem;" id="fallback-residential-rows">
+            <div class="row">
+              <span class="label">residential calls</span>
+              <span class="value" id="fb-res-calls">—</span>
+            </div>
+            <div class="row">
+              <span class="label">residential success</span>
+              <span class="value" id="fb-res-ok">—</span>
+            </div>
+            <div class="row">
+              <span class="label">residential failed</span>
+              <span class="value" id="fb-res-fail">—</span>
+            </div>
+          </div>
         </div>
-        <div class="row">
-          <span class="label">last url</span>
-          <span class="value" style="font-size: 0.78rem; max-width: 24rem" id="node-last-url">{{ lf.get("url") or "—" }}</span>
-        </div>
-        {% if lf.get("at") %}
-        <div class="row">
-          <span class="label">last activity</span>
-          <span class="value" id="node-last-activity">{{ lf.get("at") }}</span>
-        </div>
-        {% endif %}
-        {% if lf.get("bytes") %}
-        <div class="row">
-          <span class="label">last fetch size</span>
-          <span class="value">{{ (lf.get("bytes", 0) / 1024)|round(0)|int }} KB</span>
-        </div>
-        {% endif %}
-        {% if lf.get("error") %}
-        <div class="row">
-          <span class="label">last error</span>
-          <span class="value" style="color: #fca5a5; font-size: 0.78rem">{{ lf.get("error") }}</span>
-        </div>
-        {% endif %}
-        {% endif %}
-        {% elif node.get("configured") %}
-        <div class="row">
-          <span class="label">detail</span>
-          <span class="value">{{ node.get("detail", "—") }}</span>
-        </div>
-        {% else %}
-        <div class="row">
-          <span class="label">detail</span>
-          <span class="value">{{ node.get("detail", "—") }}</span>
-        </div>
-        {% endif %}
       </div>
 
       <!-- Scraper -->
@@ -377,7 +598,7 @@
 
       <!-- Screenshot Gallery -->
       <div class="card" style="margin-top: 1rem;">
-        <p class="card-title">recent screenshots</p>
+        <p class="card-title">recent screenshots · click to zoom</p>
         <div id="screenshot-grid">
           <p style="color: #64748b; font-size: 0.8rem;">loading...</p>
         </div>
@@ -429,18 +650,50 @@
         }
       })();
 
+      function updateNodeHero(data) {
+        var icon = document.getElementById('node-hero-icon');
+        var title = document.getElementById('node-hero-title');
+        var sub = document.getElementById('node-hero-sub');
+        if (!icon || !title) return;
+
+        var reachable = data.reachable;
+        var configured = data.configured !== false;
+        var browserOk = data.browser_connected;
+        var lf = data.last_fetch;
+
+        if (!configured) {
+          icon.className = 'hero-icon muted'; icon.textContent = '⚙';
+          title.textContent = 'Not configured';
+          sub.textContent = 'VHN_RESIDENTIAL_FETCHER_URL not set';
+        } else if (reachable && browserOk) {
+          icon.className = 'hero-icon ok'; icon.textContent = '✓';
+          if (lf && lf.status === 'ok') {
+            title.textContent = 'Operational';
+            sub.textContent = 'Fetching and solving CF challenges';
+          } else {
+            title.textContent = 'Online · idle';
+            sub.textContent = 'Browser ready, no recent fetch';
+          }
+        } else if (reachable && !browserOk) {
+          icon.className = 'hero-icon warn'; icon.textContent = '!';
+          title.textContent = 'Degraded';
+          sub.textContent = 'Node reachable but browser disconnected';
+        } else if (data.status === 'timeout') {
+          icon.className = 'hero-icon bad'; icon.textContent = '⏱';
+          title.textContent = 'Unreachable';
+          sub.textContent = 'Timeout — laptop may be asleep';
+        } else {
+          icon.className = 'hero-icon bad'; icon.textContent = '✕';
+          title.textContent = 'Offline';
+          sub.textContent = data.detail || 'Node not responding';
+        }
+      }
+
       function updateNode(data) {
         if (!data) return;
+        updateNodeHero(data);
         const card = document.getElementById("node-card");
         if (!card) return;
-
-        // Status row
-        const statusEl = document.getElementById("node-status");
-        if (statusEl) {
-          const ok = data.reachable;
-          const dotClass = ok ? "ok" : (data.status === "not_configured" ? "warn" : "bad");
-          statusEl.innerHTML = '<span class="dot ' + dotClass + '"></span> ' + (data.status || "unknown");
-        }
 
         // Browser row
         const browserEl = document.getElementById("node-browser");
@@ -460,6 +713,49 @@
           const la = document.getElementById("node-last-activity");
           if (la && lf.at) la.textContent = fmtTime(lf.at);
         }
+      }
+
+      function updateFallback(data) {
+        if (!data) return;
+
+        var layers = [
+          { key: 'og_image',     val: data.og_image     || 0, color: '#3b82f6', name: 'OG image' },
+          { key: 'wayback_og',   val: data.wayback_og   || 0, color: '#06b6d4', name: 'Wayback OG' },
+          { key: 'screenshot',   val: data.screenshot   || 0, color: '#8b5cf6', name: 'Screenshot' },
+          { key: 'pdf',          val: data.pdf          || 0, color: '#ec4899', name: 'PDF render' },
+          { key: 'favicon',      val: data.favicon      || 0, color: '#f59e0b', name: 'Favicon' },
+          { key: 'cached',       val: data.cached       || 0, color: '#64748b', name: 'Cache hit' },
+          { key: 'placeholder',  val: data.placeholder  || 0, color: '#475569', name: 'Placeholder' },
+          { key: 'skipped',      val: data.skipped      || 0, color: '#1e293b', name: 'Skipped' },
+        ];
+        var total = layers.reduce(function(sum, l) { return sum + l.val; }, 0) || 1;
+
+        var bar = document.getElementById('fallback-bar');
+        if (bar) {
+          bar.innerHTML = layers
+            .filter(function(l) { return l.val > 0; })
+            .map(function(l) {
+              var pct = (l.val / total * 100).toFixed(1);
+              return '<div class="bar-segment" style="background:' + l.color + '; width:' + pct + '%">&nbsp;</div>';
+            })
+            .join('');
+        }
+
+        var legend = document.getElementById('fallback-legend');
+        if (legend) {
+          legend.innerHTML = layers
+            .filter(function(l) { return l.val > 0; })
+            .map(function(l) {
+              var pct = (l.val / total * 100).toFixed(1);
+              return '<span class="legend-item"><span class="legend-swatch" style="background:' + l.color + '"></span> ' +
+                l.name + ' ' + l.val + ' (' + pct + '%)</span>';
+            })
+            .join('');
+        }
+
+        document.getElementById('fb-res-calls').textContent = fmtNum(data.residential_calls);
+        document.getElementById('fb-res-ok').textContent = fmtNum(data.residential_ok);
+        document.getElementById('fb-res-fail').textContent = fmtNum(data.residential_fail);
       }
 
       function updateScraper(data) {
@@ -482,11 +778,9 @@
         if (!data || data.error) return;
         const total = data.total || 1;
 
-        // Update total
         const t = document.getElementById("db-total");
         if (t) t.textContent = fmtNum(data.total);
 
-        // Rebuild bar
         const bar = document.getElementById("db-bar");
         if (!bar) return;
         const segments = [
@@ -513,6 +807,7 @@
           }
           const data = await r.json();
           updateNode(data.node);
+          updateFallback(data.fallback);
           updateScraper(data.scraper);
           updateDb(data.db);
         } catch (e) {
@@ -533,20 +828,19 @@
             return;
           }
           grid.innerHTML = data.screenshots.map(function (s) {
-            // Tiny files are almost always blank/error captures — flag them loudly.
-            const suspect = s.missing || (s.bytes || 0) < 15000;
-            const badge = s.missing
+            var suspect = s.missing || (s.bytes || 0) < 15000;
+            var badge = s.missing
               ? '<span class="ss-badge bad">file missing</span>'
               : (suspect ? '<span class="ss-badge warn">' + fmtBytes(s.bytes) + '</span>'
                          : '<span class="ss-badge">' + fmtBytes(s.bytes) + '</span>');
-            const og = s.has_og ? '<span class="ss-badge">og</span>' : '';
-            const pos = s.position ? '#' + s.position : '—';
+            var og = s.has_og ? '<span class="ss-badge">og</span>' : '';
+            var pos = s.position ? '#' + s.position : '—';
             return '<div class="ss-cell">' +
-              '<a href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.title) + '">' +
-              '<div class="ss-thumb' + (suspect ? ' suspect' : '') + '">' +
+              '<div class="ss-thumb' + (suspect ? ' suspect' : '') + '" ' +
+              'onclick="openLightbox(\'' + esc(s.image) + '\', \'' + esc(s.title) + '\', \'' + esc(s.url) + '\', \'' + esc(s.domain) + '\')">' +
               '<img src="' + esc(s.image) + '" loading="lazy" alt="" ' +
               'onerror="this.parentElement.classList.add(\'broken\')" />' +
-              '</div></a>' +
+              '</div>' +
               '<p class="ss-title">' + esc(s.title) + '</p>' +
               '<p class="ss-meta">' + esc(s.domain) + '</p>' +
               '<p class="ss-meta">' + pos + ' · ' + fmtNum(s.score) + ' pts · ' +
@@ -559,6 +853,241 @@
         } catch (e) {
           console.error("screenshot poll failed", e);
         }
+      }
+
+      /* ═══ Lightbox (ported from extension content.js) ═══ */
+      var modalEl = null, modalImg = null, modalStage = null;
+      var animFrame = null;
+      var ax = 0, ay = 0, as = 1;   // animated state
+      var tx = 0, ty = 0, ts = 1;   // target state
+      var LERP = 0.18;
+      var pointers = new Map();
+      var panInitX = 0, panInitY = 0, panBaseX = 0, panBaseY = 0;
+      var pinchDist0 = 0, pinchScale0 = 1, pinchCX = 0, pinchCY = 0;
+      var didDrag = false, ptrDownX = 0, ptrDownY = 0;
+
+      function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+      function updateTransform() {
+        if (modalImg) {
+          modalImg.style.transform = 'translate(' + ax + 'px,' + ay + 'px) scale(' + as + ')';
+        }
+      }
+
+      function animLoop() {
+        var dirty = false;
+        if (Math.abs(ax - tx) > 0.05) { ax += (tx - ax) * LERP; dirty = true; } else { ax = tx; }
+        if (Math.abs(ay - ty) > 0.05) { ay += (ty - ay) * LERP; dirty = true; } else { ay = ty; }
+        if (Math.abs(as - ts) > 0.001) { as += (ts - as) * LERP; dirty = true; } else { as = ts; }
+        updateTransform();
+        if (dirty) animFrame = requestAnimationFrame(animLoop);
+        else animFrame = null;
+      }
+
+      function startAnim() { if (!animFrame) animFrame = requestAnimationFrame(animLoop); }
+
+      function scaleToFit() {
+        if (!modalImg || !modalStage || !modalImg.naturalWidth) return;
+        var sw = modalStage.clientWidth, sh = modalStage.clientHeight;
+        var iw = modalImg.naturalWidth, ih = modalImg.naturalHeight;
+        ts = clamp(Math.min(sw / iw, sh / ih) * 0.92, 0.05, 8);
+        tx = 0; ty = 0;
+        startAnim();
+      }
+
+      function ptrDist(a, b) { return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY); }
+      function ptrMid(a, b) { return [(a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2]; }
+
+      function hitTestImage(sx, sy) {
+        if (!modalImg || !modalStage || !modalImg.naturalWidth) return false;
+        var r = modalStage.getBoundingClientRect();
+        var iw = modalImg.naturalWidth * as, ih = modalImg.naturalHeight * as;
+        var cx = r.left + r.width * 0.5 + ax, cy = r.top + r.height * 0.5 + ay;
+        return sx >= cx - iw/2 && sx <= cx + iw/2 && sy >= cy - ih/2 && sy <= cy + ih/2;
+      }
+
+      function onPtrDown(e) {
+        if (!modalEl || !modalEl.classList.contains('vhn-open')) return;
+        if (e.target.closest('.vhn-modal-bar, .vhn-modal-close')) return;
+        e.preventDefault();
+        pointers.set(e.pointerId, e);
+        modalStage.setPointerCapture(e.pointerId);
+        didDrag = false;
+        ptrDownX = e.clientX; ptrDownY = e.clientY;
+        if (pointers.size === 1) {
+          panBaseX = tx; panBaseY = ty;
+          panInitX = e.clientX; panInitY = e.clientY;
+          modalEl.classList.add('vhn-dragging');
+        } else if (pointers.size === 2) {
+          var arr = Array.from(pointers.values());
+          pinchDist0 = ptrDist(arr[0], arr[1]);
+          pinchScale0 = ts;
+          panBaseX = tx; panBaseY = ty;
+          var mid = ptrMid(arr[0], arr[1]);
+          panInitX = mid[0]; panInitY = mid[1];
+          var r = modalStage.getBoundingClientRect();
+          pinchCX = (panInitX - r.left - r.width * 0.5 - panBaseX) / pinchScale0;
+          pinchCY = (panInitY - r.top - r.height * 0.5 - panBaseY) / pinchScale0;
+        }
+      }
+
+      function onPtrMove(e) {
+        if (!pointers.has(e.pointerId)) return;
+        e.preventDefault();
+        pointers.set(e.pointerId, e);
+        if (!didDrag && pointers.size === 1) {
+          var dx = e.clientX - panInitX, dy = e.clientY - panInitY;
+          if (dx*dx + dy*dy > 9) didDrag = true;
+        }
+        if (pointers.size === 1) {
+          tx = panBaseX + (e.clientX - panInitX);
+          ty = panBaseY + (e.clientY - panInitY);
+          startAnim();
+        } else if (pointers.size === 2) {
+          didDrag = true;
+          var arr = Array.from(pointers.values());
+          var d = ptrDist(arr[0], arr[1]);
+          ts = clamp(pinchScale0 * (d / pinchDist0), 0.05, 8);
+          var mid = ptrMid(arr[0], arr[1]);
+          var r = modalStage.getBoundingClientRect();
+          tx = mid[0] - r.left - r.width * 0.5 - ts * pinchCX;
+          ty = mid[1] - r.top - r.height * 0.5 - ts * pinchCY;
+          startAnim();
+        }
+      }
+
+      function onPtrUp(e) {
+        if (!pointers.has(e.pointerId)) return;
+        e.preventDefault();
+        pointers.delete(e.pointerId);
+        try { modalStage.releasePointerCapture(e.pointerId); } catch (_) {}
+        if (pointers.size === 0) {
+          modalEl.classList.remove('vhn-dragging');
+          if (!didDrag && !hitTestImage(ptrDownX, ptrDownY)) closeLightbox();
+        } else if (pointers.size === 1) {
+          var p = Array.from(pointers.values())[0];
+          panBaseX = tx; panBaseY = ty;
+          panInitX = p.clientX; panInitY = p.clientY;
+        }
+      }
+
+      function onWheel(e) {
+        if (!modalEl || !modalEl.classList.contains('vhn-open')) return;
+        if (e.target.closest('.vhn-modal-bar')) return;
+        e.preventDefault();
+        var delta = -e.deltaY;
+        var factor = 1 + delta / 500;
+        var ns = clamp(ts * factor, 0.05, 8);
+        var adj = ns / ts;
+        var r2 = modalStage.getBoundingClientRect();
+        var cx = e.clientX - r2.left - r2.width * 0.5;
+        var cy = e.clientY - r2.top - r2.height * 0.5;
+        tx = cx - adj * (cx - tx);
+        ty = cy - adj * (cy - ty);
+        ts = ns;
+        startAnim();
+      }
+
+      function onDblClick(e) {
+        if (!modalEl || !modalEl.classList.contains('vhn-open')) return;
+        if (e.target.closest('.vhn-modal-bar, .vhn-modal-close')) return;
+        e.preventDefault();
+        if (as > 1.2) {
+          scaleToFit();
+        } else {
+          var r = modalStage.getBoundingClientRect();
+          var cx = e.clientX - r.left - r.width * 0.5;
+          var cy = e.clientY - r.top - r.height * 0.5;
+          ts = clamp(ts * 2.5, 0.05, 8);
+          var adj2 = ts / as;
+          tx = cx - adj2 * (cx - tx);
+          ty = cy - adj2 * (cy - ty);
+          startAnim();
+        }
+      }
+
+      function ensureModal() {
+        if (modalEl) return modalEl;
+        modalEl = document.createElement('div');
+        modalEl.className = 'vhn-modal';
+        modalEl.innerHTML =
+          '<button type="button" class="vhn-modal-close" aria-label="Close"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>' +
+          '<div class="vhn-modal-stage"><img class="vhn-modal-img" alt="" /></div>' +
+          '<div class="vhn-modal-bar">' +
+          '<span class="vhn-modal-info">' +
+          '<span class="vhn-modal-text">' +
+          '<a class="vhn-modal-title" href="#" target="_blank" rel="noopener noreferrer"></a>' +
+          '<span class="vhn-modal-desc"></span>' +
+          '</span>' +
+          '</span>' +
+          '<span class="vhn-modal-zoom">' +
+          '<button type="button" class="vhn-zoom-btn" data-zoom="in" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg></button>' +
+          '<button type="button" class="vhn-zoom-btn" data-zoom="out" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg></button>' +
+          '<button type="button" class="vhn-zoom-btn" data-zoom="actual" aria-label="Actual size (1:1)" title="Actual size (1:1)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg></button>' +
+          '<button type="button" class="vhn-zoom-btn" data-zoom="fit" aria-label="Fit to screen" title="Fit to screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M20 15v5h-5"/><path d="M4 15v5h5"/><path d="M20 9V4h-5"/></svg></button>' +
+          '</span>' +
+          '</div>';
+
+        modalStage = modalEl.querySelector('.vhn-modal-stage');
+        modalImg = modalEl.querySelector('.vhn-modal-img');
+
+        modalEl.querySelector('.vhn-modal-close').addEventListener('click', closeLightbox);
+
+        modalEl.querySelectorAll('.vhn-zoom-btn').forEach(function(btn) {
+          btn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            var action = btn.getAttribute('data-zoom');
+            if (action === 'fit') { scaleToFit(); }
+            else if (action === 'actual') { ts = 1; tx = 0; ty = 0; startAnim(); }
+            else if (action === 'in') { ts = clamp(ts * 1.5, 0.05, 8); startAnim(); }
+            else if (action === 'out') { ts = clamp(ts / 1.5, 0.05, 8); startAnim(); }
+          });
+        });
+
+        modalStage.addEventListener('pointerdown', onPtrDown);
+        modalStage.addEventListener('pointermove', onPtrMove);
+        modalStage.addEventListener('pointerup', onPtrUp);
+        modalStage.addEventListener('pointercancel', onPtrUp);
+        modalStage.addEventListener('pointerleave', onPtrUp);
+        modalStage.addEventListener('wheel', onWheel, { passive: false });
+        modalStage.addEventListener('dblclick', onDblClick);
+
+        document.body.appendChild(modalEl);
+        return modalEl;
+      }
+
+      function openLightbox(src, title, url, domain) {
+        var el = ensureModal();
+        modalImg.src = src;
+        var titleEl = el.querySelector('.vhn-modal-title');
+        titleEl.textContent = title || '';
+        titleEl.href = url || '#';
+        var desc = el.querySelector('.vhn-modal-desc');
+        desc.textContent = domain || '';
+
+        ax = 0; ay = 0; as = 1;
+        tx = 0; ty = 0; ts = 1;
+        updateTransform();
+        el.classList.add('vhn-open');
+
+        function autoFit() {
+          if (!modalImg.naturalWidth || !modalStage) return;
+          var sw = modalStage.clientWidth, sh = modalStage.clientHeight;
+          if (modalImg.naturalWidth > sw || modalImg.naturalHeight > sh) {
+            scaleToFit();
+          }
+        }
+        if (modalImg.complete && modalImg.naturalWidth) {
+          autoFit();
+        } else {
+          modalImg.addEventListener('load', autoFit, { once: true });
+        }
+      }
+
+      function closeLightbox() {
+        if (modalEl) modalEl.classList.remove('vhn-open');
+        pointers.clear();
+        if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
       }
 
       setInterval(pollStats, 30000);

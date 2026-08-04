@@ -74,6 +74,9 @@ from .images import (
 # ── orchestrator ──
 from .orchestrator import fetch_metadata
 
+# ── stats ──
+from .stats import fallback_stats, reset_fallback_stats
+
 __all__ = [
     # safety
     "normalize_whitespace",
@@ -113,4 +116,7 @@ __all__ = [
     "_render_pdf_first_page",
     # orchestrator
     "fetch_metadata",
+    # stats
+    "fallback_stats",
+    "reset_fallback_stats",
 ]
