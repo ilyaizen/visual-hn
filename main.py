@@ -37,6 +37,24 @@ ADMIN_LOGIN_WINDOW_S = 300  # 5 min window for rate-limiting
 
 NODE_HEALTH_CACHE_TTL = 15  # seconds — node health is polled at most this often
 
+# Process start time for uptime display in the admin footer.
+_start_time = time.time()
+
+
+def _git_sha() -> str:
+    """Current git short SHA, or 'unknown' if not in a repo."""
+    import subprocess
+
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
 # In-memory session store: token → expiry timestamp. Cleared on restart.
 _admin_sessions: dict[str, float] = {}
 
@@ -494,6 +512,8 @@ async def admin_stats_api(request: Request):
             "scraper": dict(scraper_status),
             "fallback": dict(fallback_stats),
             "server_time": time.time(),
+            "git_sha": _git_sha(),
+            "uptime_seconds": round(time.time() - _start_time),
         }
     )
 

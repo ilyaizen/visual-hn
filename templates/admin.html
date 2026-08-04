@@ -343,6 +343,7 @@
         border-radius: 6px;
         width: 32px;
         height: 32px;
+        padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -373,6 +374,7 @@
         border-radius: 50%;
         width: 36px;
         height: 36px;
+        padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -389,6 +391,22 @@
         stroke-linecap: round;
         fill: none;
       }
+
+      /* ── Footer ── */
+      .footer {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #1e293b;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.5rem;
+        font-size: 0.72rem;
+        color: #475569;
+      }
+      .footer span { white-space: nowrap; }
+      .footer a { color: #64748b; text-decoration: none; }
+      .footer a:hover { color: #fdba74; }
+      .footer .sep { color: #334155; }
     </style>
   </head>
   <body>
@@ -603,6 +621,19 @@
           <p style="color: #64748b; font-size: 0.8rem;">loading...</p>
         </div>
       </div>
+
+      <!-- Footer -->
+      <div class="footer" id="footer">
+        <span>vhn <span id="ft-sha">—</span></span>
+        <span class="sep">·</span>
+        <span id="ft-uptime">uptime —</span>
+        <span class="sep">·</span>
+        <span id="ft-db">db —</span>
+        <span class="sep">·</span>
+        <span>cycle <span id="ft-cycle">—</span></span>
+        <span class="sep">·</span>
+        <a href="https://github.com/ilyaizen/visual-hn" target="_blank" rel="noopener">github</a>
+      </div>
       {% endif %}
     </div>
 
@@ -798,6 +829,31 @@
           .join("");
       }
 
+      function fmtUptime(s) {
+        if (!s || s < 0) return "—";
+        var d = Math.floor(s / 86400);
+        var h = Math.floor((s % 86400) / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        if (d > 0) return d + "d " + h + "h";
+        if (h > 0) return h + "h " + m + "m";
+        return m + "m";
+      }
+
+      function updateFooter(data) {
+        if (!data) return;
+        var sha = document.getElementById("ft-sha");
+        if (sha) sha.textContent = data.git_sha || "—";
+        var up = document.getElementById("ft-uptime");
+        if (up) up.textContent = "uptime " + fmtUptime(data.uptime_seconds);
+        var db = document.getElementById("ft-db");
+        if (db) db.textContent = "db " + fmtNum(data.db && data.db.total) + " rows";
+        var cyc = document.getElementById("ft-cycle");
+        if (cyc) {
+          var cs = data.fallback && data.fallback.cycle_started_at;
+          cyc.textContent = cs ? fmtTime(cs) : "—";
+        }
+      }
+
       async function pollStats() {
         try {
           const r = await fetch("/admin/api/stats", { cache: "no-store" });
@@ -810,6 +866,7 @@
           updateFallback(data.fallback);
           updateScraper(data.scraper);
           updateDb(data.db);
+          updateFooter(data);
         } catch (e) {
           console.error("poll failed", e);
         }

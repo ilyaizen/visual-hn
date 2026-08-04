@@ -291,6 +291,13 @@ async def lifespan(app: FastAPI):
     logger.info(
         "CF challenge max wait: %.0fs (headless auto-solve)", CF_CHALLENGE_MAX_WAIT
     )
+    # Pre-warm the browser so health reports "ok" immediately after startup,
+    # rather than "degraded" until the first /fetch request arrives (~15 min).
+    try:
+        await _ensure_browser()
+        logger.info("Browser pre-warmed at startup")
+    except Exception as exc:
+        logger.warning("Browser pre-warm failed: %s — will retry on first /fetch", exc)
     yield
     await _teardown_browser()
 
