@@ -8,7 +8,7 @@ import os
 import sys
 import tracemalloc
 
-from metadata import fetch_metadata
+from metadata import fetch_metadata, fallback_stats, reset_fallback_stats
 from database import update_stories
 
 # Configure logging for this module
@@ -136,6 +136,8 @@ async def start_scraper() -> None:
     while True:
         try:
             logger.info("Starting a new scraping cycle...")
+            reset_fallback_stats()
+            fallback_stats["cycle_started_at"] = time.time()
             log_memory("cycle-start")
             stories = await fetch_top_stories()
             log_memory("after-hn-api")

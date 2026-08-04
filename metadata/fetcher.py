@@ -20,6 +20,7 @@ from curl_cffi.requests import AsyncSession as CurlCffiSession
 import screenshot as screenshot_module
 
 from .safety import is_public_http_url
+from .stats import fallback_stats
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,7 @@ async def _residential_fetch_html(
     if not RESIDENTIAL_FETCHER_URL:
         return None, None
 
+    fallback_stats["residential_calls"] += 1
     fetch_timeout = (
         timeout_override
         if timeout_override is not None
@@ -214,13 +216,16 @@ async def _residential_fetch_html(
                 final_url = data.get("final_url") or url
                 if html:
                     logger.info("residential fetcher succeeded for %s", url)
+                    fallback_stats["residential_ok"] += 1
                     return html, final_url
                 logger.info("residential fetcher returned no HTML for %s", url)
                 return None, final_url
     except asyncio.TimeoutError:
         logger.info("residential fetcher timed out for %s (node may be off)", url)
+        fallback_stats["residential_fail"] += 1
     except aiohttp.ClientConnectorError:
         logger.info("residential fetcher unreachable for %s (node may be off)", url)
+        fallback_stats["residential_fail"] += 1
     except Exception as exc:
         logger.warning(
             "residential fetcher error for %s: %s - %s",
@@ -228,6 +233,7 @@ async def _residential_fetch_html(
             type(exc).__name__,
             exc,
         )
+        fallback_stats["residential_fail"] += 1
 
     return None, None
 

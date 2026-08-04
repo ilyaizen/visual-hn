@@ -48,6 +48,7 @@ from .images import (
     _render_pdf_first_page,
     generate_favicon_composite,
 )
+from .stats import fallback_stats
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ async def fetch_metadata(
     cached_metadata = get_cached_metadata(url)
     if should_use_cached_metadata(cached_metadata):
         logger.debug("Cache hit for %s", url)
+        fallback_stats["cached"] += 1
         return cached_metadata
     retries = 0
     if cached_metadata:
@@ -87,6 +89,7 @@ async def fetch_metadata(
 
     if not is_public_http_url(url):
         logger.warning("Skipping metadata fetch for unsafe URL %s", url)
+        fallback_stats["skipped"] += 1
         fallback_description = build_fallback_description(url, text_snippet)
         metadata = {
             "image_url": PLACEHOLDER_IMAGE,
@@ -109,6 +112,7 @@ async def fetch_metadata(
         logger.info("PDF URL detected, rendering first page for %s", url)
         image_filename = await _render_pdf_first_page(url)
         if image_filename:
+            fallback_stats["pdf"] += 1
             og_image_url = None
             metadata = {
                 "image_url": f"/static/images/{image_filename}",
@@ -224,6 +228,7 @@ async def fetch_metadata(
         og_image_url = extract_og_image_url(html, final_url)
         if og_image_url:
             logger.info("Using remote og:image for %s", url)
+            fallback_stats["og_image"] += 1
 
     # Layer 2.5: Wayback Machine archive fallback.
     # When the original page is anti-bot blocked (no HTML, no og:image), try
@@ -247,6 +252,7 @@ async def fetch_metadata(
                     if not og_image_url.startswith(("http://", "https://")):
                         og_image_url = "https://" + og_image_url
                 logger.info("Using wayback og:image for %s", url)
+                fallback_stats["wayback_og"] += 1
 
     if (
         not og_image_url
@@ -277,6 +283,15 @@ async def fetch_metadata(
 
     if not image_filename and not og_image_url and time.monotonic() < deadline:
         image_filename = await generate_favicon_composite(url)
+
+    # ── Track which layer ultimately resolved the image ──
+    # og_image/wayback_og are counted inline where the og:image is found.
+    if image_filename and image_filename.startswith("fav-"):
+        fallback_stats["favicon"] += 1
+    elif image_filename and og_image_url is None:
+        fallback_stats["screenshot"] += 1
+    elif not image_filename and not og_image_url:
+        fallback_stats["placeholder"] += 1
 
     metadata = {
         "image_url": (

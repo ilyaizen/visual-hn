@@ -17,7 +17,7 @@ from urllib.request import Request as UrlRequest, urlopen
 
 import aiohttp
 
-from metadata import favicon_url, source_domain, PLACEHOLDER_IMAGE
+from metadata import favicon_url, source_domain, PLACEHOLDER_IMAGE, fallback_stats
 from hn_scraper import start_scraper, scraper_status
 from database import get_stories, get_story_images, init_db, async_session
 from hcker_proxy import EXTENSION_DIR, register_routes
@@ -492,6 +492,7 @@ async def admin_stats_api(request: Request):
             "node": node,
             "db": db_stats,
             "scraper": dict(scraper_status),
+            "fallback": dict(fallback_stats),
             "server_time": time.time(),
         }
     )
