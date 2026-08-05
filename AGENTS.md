@@ -143,13 +143,12 @@ sudo journalctl -u visual-hn -f     # live logs
 egister-task.ps1
 ```
 
-### CSS (rebuild Tailwind when modifying styles) [VPS]
+### CSS (rebuild Tailwind v4 when modifying styles) [VPS]
 
 ```bash
-pnpm install
-pnpm exec tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch
-# If pnpm unavailable:
-npx tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch
+npx @tailwindcss/cli -i ./static/css/input.css -o ./static/css/output.css
+# Watch mode:
+npx @tailwindcss/cli -i ./static/css/input.css -o ./static/css/output.css --watch
 ```
 
 ### Tests [VPS]
