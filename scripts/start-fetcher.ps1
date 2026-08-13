@@ -31,15 +31,16 @@ if (-not $Secret -or $Secret.Length -lt 24) {
     exit 1
 }
 
-$Headless = if ($null -ne $env:VHN_FETCHER_HEADLESS -and $env:VHN_FETCHER_HEADLESS -ne '') { $env:VHN_FETCHER_HEADLESS } else { "1" }
-
-$env:RESIDENTIAL_FETCHER_SECRET   = $Secret
-$env:RESIDENTIAL_FETCHER_PORT     = $Port
+$env:RESIDENTIAL_FETCHER_SECRET = $Secret
+$env:RESIDENTIAL_FETCHER_PORT   = $Port
+$Headless = $env:VHN_FETCHER_HEADLESS
+if (-not $Headless) {
+    $Headless = "1"
+}
 $env:RESIDENTIAL_FETCHER_HEADLESS = $Headless
+$BrowserMode = if ($Headless.ToLower() -in @("0", "false", "no")) { "headful" } else { "headless" }
 
-$Mode = if ($Headless -in @("0", "false", "False", "no", "No")) { "headful" } else { "headless" }
-
-Write-Host "Starting Visual-HN Residential Fetcher on port $Port ($Mode)..."
+Write-Host "Starting Visual-HN Residential Fetcher on port $Port ($BrowserMode)..."
 Write-Host "Repo: $RepoDir"
 Write-Host "Python: $VenvPython"
 
