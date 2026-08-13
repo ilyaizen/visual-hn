@@ -40,23 +40,38 @@ $env:RESIDENTIAL_FETCHER_SECRET = "your-secret-here"
 # Optional: custom port (default 18080)
 # $env:RESIDENTIAL_FETCHER_PORT = "18080"
 
+# Optional: run headful so you can solve Cloudflare / Turnstile manually.
+# This opens a real Chromium window on the residential laptop.
+# $env:RESIDENTIAL_FETCHER_HEADLESS = "0"
+
 python residential_fetcher.py
 ```
 
-The browser runs **headless** — no visible window, no taskbar button, no focus
+Default mode is **headless** — no visible window, no taskbar button, no focus
 stealing. It uses [Playwright](https://playwright.dev/) to drive a bundled
-Chromium, which auto-passes most Cloudflare managed challenges.
+Chromium, which auto-passes some Cloudflare managed challenges.
 
-When Cloudflare throws an interactive challenge, the fetcher searches all
-frames for the "verify you are human" checkbox and clicks it. If it doesn't
-resolve within `CF_CHALLENGE_MAX_WAIT` seconds, the fetch returns an error
-and the VPS falls through to Wayback → screenshot → favicon composite.
+If you need to solve an interactive Cloudflare / Turnstile checkbox yourself,
+run the fetcher in **headful** mode by setting:
 
-| Env var                          | Default                  | Purpose                                        |
-| -------------------------------- | ------------------------ | ---------------------------------------------- |
-| `RESIDENTIAL_FETCHER_PORT`       | `18080`                   | Port to listen on                              |
-| `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_             | Shared secret matching the VPS (min 24 chars)  |
-| `CF_CHALLENGE_MAX_WAIT`          | `60`                     | Seconds to wait for headless CF auto-solve     |
+```powershell
+$env:RESIDENTIAL_FETCHER_HEADLESS = "0"
+python residential_fetcher.py
+```
+
+That opens a visible Chromium window using the persistent browser profile, so
+cookies like `cf_clearance` survive after you solve the challenge once.
+
+When Cloudflare throws an interactive challenge, the fetcher still searches all
+frames for the "verify you are human" checkbox and clicks it first. If that
+fails, headful mode lets you take over manually on the laptop.
+
+| Env var                          | Default       | Purpose                                                  |
+| -------------------------------- | ------------- | -------------------------------------------------------- |
+| `RESIDENTIAL_FETCHER_PORT`       | `18080`       | Port to listen on                                        |
+| `RESIDENTIAL_FETCHER_SECRET`     | _(disabled)_  | Shared secret matching the VPS (min 24 chars)            |
+| `RESIDENTIAL_FETCHER_HEADLESS`   | `1`           | `1` = hidden browser, `0` = visible browser for manual solve |
+| `CF_CHALLENGE_MAX_WAIT`          | `60`          | Seconds to wait for CF auto-solve before giving up       |
 
 ## Auto-start on login + watchdog (Task Scheduler)
 

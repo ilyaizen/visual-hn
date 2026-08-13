@@ -49,6 +49,11 @@ logger = logging.getLogger(__name__)
 PORT = int(os.environ.get("RESIDENTIAL_FETCHER_PORT", "18080"))
 SHARED_SECRET = os.environ.get("RESIDENTIAL_FETCHER_SECRET", "")
 MIN_SECRET_LENGTH = 24
+HEADLESS = os.environ.get("RESIDENTIAL_FETCHER_HEADLESS", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+}
 CF_SETTLE_SECONDS = 3.0
 CF_CHALLENGE_TITLE = "just a moment"
 # Timeout for CF auto-solve + JS execution. If it doesn't resolve, the VPS
@@ -143,13 +148,17 @@ async def _ensure_browser() -> Any:
         _playwright = await async_playwright().start()
         _browser = await _playwright.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
-            headless=True,
+            headless=HEADLESS,
             args=[
                 "--no-first-run",
                 "--disable-blink-features=AutomationControlled",
             ],
         )
-        logger.info("Browser launched (headless Playwright, profile=%s)", PROFILE_DIR)
+        logger.info(
+            "Browser launched (%s Playwright, profile=%s)",
+            "headless" if HEADLESS else "headful",
+            PROFILE_DIR,
+        )
         return _browser
 
 
@@ -291,6 +300,7 @@ async def lifespan(app: FastAPI):
     logger.info(
         "CF challenge max wait: %.0fs (headless auto-solve)", CF_CHALLENGE_MAX_WAIT
     )
+    logger.info("Browser mode: %s", "headless" if HEADLESS else "headful")
     # Pre-warm the browser so health reports "ok" immediately after startup,
     # rather than "degraded" until the first /fetch request arrives (~15 min).
     try:
@@ -312,6 +322,7 @@ async def health():
     return {
         "status": "ok" if browser_connected else "degraded",
         "browser_connected": browser_connected,
+        "browser_mode": "headless" if HEADLESS else "headful",
         "port": PORT,
         "last_fetch": dict(_last_fetch),
         "cf_challenge_max_wait": CF_CHALLENGE_MAX_WAIT,
