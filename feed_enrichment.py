@@ -68,11 +68,10 @@ async def _enrich_one(story_id: int) -> bool:
     url = story_data.get("url") or f"https://news.ycombinator.com/item?id={story_id}"
     fallback_text = story_data.get("text") or story_data.get("title") or ""
 
-    # Screenshots are disabled during background feed enrichment to prevent
-    # Chromium resource exhaustion under traffic. Enrichment is best-effort —
-    # it only needs to capture og:image or a favicon composite. The main
-    # scraper (top-30) still runs screenshots for front-page stories.
-    metadata = await fetch_metadata(url, fallback_text, enable_screenshot=False)
+    # Timeline/feed stories need the same screenshot fallback as front-page
+    # stories. Without this, any feed-only story lacking a usable og:image
+    # degrades to placeholder/favicon and disappears from the image API.
+    metadata = await fetch_metadata(url, fallback_text, enable_screenshot=True)
     metadata.pop("retries", None)  # bookkeeping field, not a Story column
 
     async with async_session() as session:

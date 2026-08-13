@@ -97,7 +97,7 @@ python -m playwright install chromium
 .\scripts\start-fetcher.ps1
 ```
 
-A Chromium window opens — that's normal. It's the headful browser solving CF challenges. Close the PowerShell window or the Chromium window to stop it.
+A Chromium window opens only if the fetcher is started in **headful** mode (`RESIDENTIAL_FETCHER_HEADLESS=0`). That is useful when you want to solve a Cloudflare / Turnstile checkbox yourself. In the default **headless** mode, no window is shown.
 
 ### Auto-start on login (Task Scheduler)
 

@@ -1,11 +1,11 @@
-"""Headless Playwright fetcher for anti-bot circumvention.
+"""Playwright fetcher for anti-bot circumvention.
 
 Runs on the residential node (residential IP) behind Tailscale. The VPS calls
 this when curl_cffi gets 403/429/503 — a real Chrome can solve Cloudflare
 JS challenges that no HTTP client can.
 
-Uses Playwright in headless mode with a persistent browser context:
-- No visible window (Playwright's headless=True works correctly on Windows).
+Uses Playwright with a persistent browser context:
+- Headless by default; set RESIDENTIAL_FETCHER_HEADLESS=0 for a visible window.
 - Persistent browser profile (cookies including cf_clearance survive).
 - New context per request for isolation, shared browser process for efficiency.
 - When a managed CF/Turnstile challenge appears, the fetcher searches all
@@ -48,9 +48,15 @@ logger = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("RESIDENTIAL_FETCHER_PORT", "18080"))
 SHARED_SECRET = os.environ.get("RESIDENTIAL_FETCHER_SECRET", "")
+HEADLESS = os.environ.get("RESIDENTIAL_FETCHER_HEADLESS", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+}
+BROWSER_MODE = "headless" if HEADLESS else "headful"
 MIN_SECRET_LENGTH = 24
 CF_SETTLE_SECONDS = 3.0
-CF_CHALLENGE_TITLE = "just a moment"
+CF_CHALLENGE_TITLES = ("just a moment", "attention required")
 # Timeout for CF auto-solve + JS execution. If it doesn't resolve, the VPS
 # falls through to Wayback → screenshot → favicon composite.
 CF_CHALLENGE_MAX_WAIT = float(os.environ.get("CF_CHALLENGE_MAX_WAIT", "60"))
@@ -143,13 +149,15 @@ async def _ensure_browser() -> Any:
         _playwright = await async_playwright().start()
         _browser = await _playwright.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
-            headless=True,
+            headless=HEADLESS,
             args=[
                 "--no-first-run",
                 "--disable-blink-features=AutomationControlled",
             ],
         )
-        logger.info("Browser launched (headless Playwright, profile=%s)", PROFILE_DIR)
+        logger.info(
+            "Browser launched (%s Playwright, profile=%s)", BROWSER_MODE, PROFILE_DIR
+        )
         return _browser
 
 
@@ -160,6 +168,10 @@ async def _get_title(page: Any) -> str:
         return title.lower() if isinstance(title, str) else ""
     except Exception:
         return ""
+
+
+def _is_cf_challenge(title: str) -> bool:
+    return any(marker in title for marker in CF_CHALLENGE_TITLES)
 
 
 async def _try_solve_cf_challenge(page: Any) -> bool:
@@ -217,7 +229,7 @@ async def _fetch_with_browser(url: str) -> FetchResult:
         challenged = False
         while asyncio.get_event_loop().time() < cf_deadline:
             title = await _get_title(page)
-            if CF_CHALLENGE_TITLE not in title:
+            if not _is_cf_challenge(title):
                 break
             challenged = True
             await _try_solve_cf_challenge(page)
@@ -225,7 +237,7 @@ async def _fetch_with_browser(url: str) -> FetchResult:
 
         if challenged:
             final_title = await _get_title(page)
-            if CF_CHALLENGE_TITLE in final_title:
+            if _is_cf_challenge(final_title):
                 logger.warning(
                     "CF challenge did not resolve in %.0fs for %s",
                     CF_CHALLENGE_MAX_WAIT,
@@ -287,9 +299,11 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(
             f"RESIDENTIAL_FETCHER_SECRET must be at least {MIN_SECRET_LENGTH} chars"
         )
-    logger.info("Residential fetcher starting on 0.0.0.0:%d", PORT)
+    logger.info("Residential fetcher starting on 0.0.0.0:%d (%s)", PORT, BROWSER_MODE)
     logger.info(
-        "CF challenge max wait: %.0fs (headless auto-solve)", CF_CHALLENGE_MAX_WAIT
+        "CF challenge max wait: %.0fs (%s mode)",
+        CF_CHALLENGE_MAX_WAIT,
+        BROWSER_MODE,
     )
     # Pre-warm the browser so health reports "ok" immediately after startup,
     # rather than "degraded" until the first /fetch request arrives (~15 min).
@@ -312,6 +326,7 @@ async def health():
     return {
         "status": "ok" if browser_connected else "degraded",
         "browser_connected": browser_connected,
+        "browser_mode": BROWSER_MODE,
         "port": PORT,
         "last_fetch": dict(_last_fetch),
         "cf_challenge_max_wait": CF_CHALLENGE_MAX_WAIT,
