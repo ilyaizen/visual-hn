@@ -1,13 +1,15 @@
 """One-time backfill: re-run metadata for recent stories stuck on placeholder.
 
-Targets stories no older than BACKFILL_MAX_AGE_DAYS. Older ones are mostly
-dead links — not worth the fetch budget.
+Targets stories no older than BACKFILL_MAX_AGE_DAYS that are TRULY broken:
+image_url is a placeholder AND og_image_url is NULL. Stories with a remote
+og:image keep placeholder in image_url by design (clients load the remote URL
+client-side) — they are healthy and skipped.
 
 Throttling:
 - Concurrency 2 (same as feed enrichment).
 - Sleep between batches; each story runs the full fallback chain, which with
-  the new 45s residential cap + favicon exemption is bounded per story.
-- Safe to re-run: stories that already got a real image are skipped.
+  the 45s residential cap + favicon exemption is bounded per story.
+- Safe to re-run: skips are recomputed from the DB each run.
 - Safe to run while the service is up: single-writer SQLite tolerates short
   write transactions; this script writes one row at a time.
 
@@ -15,8 +17,7 @@ Usage [VPS]:
     cd /srv/apps/visual-hn
     .venv/bin/python scripts/backfill_placeholders.py [--dry-run] [--limit N]
 
-Progress is logged to stdout; interrupting (Ctrl-C) is safe and resumes where
-it left off (skips are recomputed from the DB each run).
+Progress is logged to stdout; interrupting (Ctrl-C) is safe.
 """
 
 from __future__ import annotations
@@ -44,13 +45,16 @@ CONCURRENCY = 2
 SLEEP_BETWEEN_BATCHES_SECONDS = 10
 
 
-async def get_placeholder_ids(max_age_days: int, limit: int | None) -> list[int]:
-    """IDs of stories on placeholder, newest first, within the age window."""
+async def get_broken_ids(max_age_days: int, limit: int | None) -> list[int]:
+    """IDs of truly-broken stories, newest first, within the age window."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
     async with async_session() as session:
         rows = await session.execute(
             select(Story.id, Story.time_posted)
-            .where(Story.image_url.like("%placeholder%"))
+            .where(
+                Story.image_url.like("%placeholder%"),
+                Story.og_image_url.is_(None),
+            )
             .order_by(Story.time_posted.desc())
         )
         ids = [
@@ -64,16 +68,23 @@ async def get_placeholder_ids(max_age_days: int, limit: int | None) -> list[int]
 
 
 async def backfill_one(story_id: int) -> bool:
-    """Re-run metadata for one placeholder story. Returns True on upgrade."""
+    """Re-run metadata for one broken story. Returns True on upgrade.
+
+    An upgrade is either a local image (screenshot/favicon card) or a newly
+    discovered remote og:image — both make the story render a real preview.
+    """
     async with async_session() as session:
         story = await session.get(Story, story_id)
         if story is None or "placeholder" not in (story.image_url or ""):
             return False  # already healed or gone
+        if story.og_image_url:
+            return False  # healthy via remote og:image, skip
         url = story.url
 
     metadata = await fetch_metadata(url, enable_screenshot=True)
     new_image = metadata.get("image_url") or ""
-    if "placeholder" in new_image:
+    new_og = metadata.get("og_image_url")
+    if "placeholder" in new_image and not new_og:
         return False
 
     metadata.pop("retries", None)  # bookkeeping field, not a Story column
@@ -85,14 +96,14 @@ async def backfill_one(story_id: int) -> bool:
             if hasattr(story, key):
                 setattr(story, key, value)
         await session.commit()
-    logger.info("Upgraded %d -> %s", story_id, new_image)
+    logger.info("Upgraded %d -> image=%s og=%s", story_id, new_image, bool(new_og))
     return True
 
 
 async def main(dry_run: bool, limit: int | None) -> None:
-    ids = await get_placeholder_ids(BACKFILL_MAX_AGE_DAYS, limit)
+    ids = await get_broken_ids(BACKFILL_MAX_AGE_DAYS, limit)
     logger.info(
-        "%d placeholder stories within %d days%s",
+        "%d broken stories within %d days%s",
         len(ids),
         BACKFILL_MAX_AGE_DAYS,
         " (dry run)" if dry_run else "",
