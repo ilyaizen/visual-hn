@@ -106,10 +106,10 @@ def test_rewrite_proxy_header_brands_reader_and_repoints_link():
 
     rewritten = hcker_proxy.rewrite_proxy_header(html)
 
-    # The h1 link is rebranded to animated rainbow "visual" + ".hcker.news".
-    assert "vhn-rainbow" in rewritten
-    assert "vhn-rainbow-char" in rewritten
-    assert "vhn-logo-suffix" in rewritten
+    # The h1 link is rebranded to plain "visual-hn" text.
+    assert "vhn-rainbow" not in rewritten
+    assert "vhn-logo-suffix" not in rewritten
+    assert ">visual-hn</a>" in rewritten
     assert "hcker.news" in rewritten
     assert "hacker news" not in rewritten.lower()
     assert "reader" in rewritten
@@ -122,7 +122,7 @@ def test_header_rebrand_script_targets_header_title_without_rebranding_descripto
 
     assert "#header h1 a" in script
     assert "#header .tagline" in script
-    assert "visual.hcker.news" in script
+    assert "visual-hn" in script
     assert "TITLE_RE = /^hcker\\.news$/i" in script
 
 

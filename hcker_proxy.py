@@ -198,17 +198,7 @@ def rewrite_proxy_header(html: str) -> str:
     """Brand the proxied hcker.news header for this preview-enhanced reader."""
     soup = BeautifulSoup(html, "html.parser")
 
-    RAINBOW_HTML = (
-        '<span class="vhn-rainbow">'
-        '<span class="vhn-rainbow-char" style="--i:0">v</span>'
-        '<span class="vhn-rainbow-char" style="--i:1">i</span>'
-        '<span class="vhn-rainbow-char" style="--i:2">s</span>'
-        '<span class="vhn-rainbow-char" style="--i:3">u</span>'
-        '<span class="vhn-rainbow-char" style="--i:4">a</span>'
-        '<span class="vhn-rainbow-char" style="--i:5">l</span>'
-        "</span>"
-        '<span class="vhn-logo-suffix">.hcker.news</span>'
-    )
+    BRAND_TEXT = "visual-hn"
 
     container = None
     for tag_name in (["header", "nav"], ["body"]):
@@ -227,8 +217,7 @@ def rewrite_proxy_header(html: str) -> str:
         link_text = link.get_text(" ", strip=True).lower()
         href = link.get("href", "")
         if link_text == "hcker.news":
-            link.clear()
-            link.append(BeautifulSoup(RAINBOW_HTML, "html.parser"))
+            link.string = BRAND_TEXT
             continue
         if "hacker news" in link_text or (
             isinstance(href, str) and "news.ycombinator.com" in href
@@ -293,7 +282,7 @@ def rewrite_meta_tags(html: str) -> str:
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    VHN_TITLE = "visual.hcker.news"
+    VHN_TITLE = "visual-hn"
     VHN_DESC = (
         "visual.hcker.news — a hcker.news reader with pictures. "
         "Preview images, rank badges, and trend arrows for every story."
