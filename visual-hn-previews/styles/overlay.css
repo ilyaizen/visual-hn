@@ -627,66 +627,9 @@
   cursor: pointer;
 }
 
-/* ----- rainbow header chars ("visual") ----- */
-/* Progressive enhancement: chars are visible (not animated) by default.
-   Animation only applies when JS is active (.js class on <html>) AND
-   the user hasn't requested reduced motion. */
-.vhn-rainbow-char {
-  --_c: currentColor;
-  display: inline-block;
-  color: var(--_c);
-  transition: color 0.5s ease;
-}
-
-.js .vhn-rainbow-char {
-  opacity: 0;
-  transform: translateY(4px);
-  animation: vhn-char-pop 0.3s ease calc(var(--i, 0) * 0.12s + 0.15s) forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .js .vhn-rainbow-char {
-    opacity: 1;
-    transform: none;
-    animation: none;
-  }
-}
-
-/* Rainbow palette — stepped per character */
-.vhn-rainbow-char:nth-child(1) { --_c: #ff6b6b; }
-.vhn-rainbow-char:nth-child(2) { --_c: #ffa94d; }
-.vhn-rainbow-char:nth-child(3) { --_c: #69db7c; }
-.vhn-rainbow-char:nth-child(4) { --_c: #4dabf7; }
-.vhn-rainbow-char:nth-child(5) { --_c: #9775fa; }
-.vhn-rainbow-char:nth-child(6) { --_c: #f783ac; }
-
-@keyframes vhn-char-pop {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* After 2 s, JS adds .vhn-rainbow-faded — chars transition to white.
-   Skipped under reduced-motion (chars stay rainbow, no transition). */
-.js .vhn-rainbow.vhn-rainbow-faded .vhn-rainbow-char {
-  color: inherit;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .js .vhn-rainbow.vhn-rainbow-faded .vhn-rainbow-char {
-    color: var(--_c);
-    transition: none;
-  }
-}
-
-/* Hover restores rainbow */
-.vhn-rainbow:hover .vhn-rainbow-char {
-  color: var(--_c);
-}
-
-/* Logo suffix ".hcker.news" — static, next to rainbow "visual" */
-.vhn-logo-suffix {
-  color: inherit;
-}
+/* ----- header brand ("visual-hn") ----- */
+/* Plain text — no animation. The .js class is still added by
+   header-rebrand.js for progressive-enhancement hooks elsewhere. */
 
 /* Tagline hidden on mobile — "reader with pictures" is too long for small screens.
    Show at ≥640px where the header has breathing room. */
@@ -784,14 +727,7 @@
    Switch to full-width portrait (3:4) thumbnails stacked above the text,
    and kill the desktop-only hover-reveal zoom. */
 @media (max-width: 640px) {
-  /* Mobile: compact "vhn" logo — hide rainbow animation + suffix */
-  #header h1 a .vhn-rainbow,
-  #header h1 a .vhn-logo-suffix {
-    display: none !important;
-  }
-  #header h1 a::after {
-    content: 'vhn';
-  }
+  /* Mobile: compact logo — plain "visual-hn" text, no overrides needed */
 
   /* Stack image above text instead of side-by-side */
   .vhn-xs-host {

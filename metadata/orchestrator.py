@@ -281,7 +281,12 @@ async def fetch_metadata(
         else:
             logger.warning("Skipping screenshot fallback for unsafe URL %s", final_url)
 
-    if not image_filename and not og_image_url and time.monotonic() < deadline:
+    if not image_filename and not og_image_url:
+        # Favicon composite is exempt from the deadline check. It is a cheap,
+        # fast operation (Google S2 fetch + local render) and the last line of
+        # defense before a story degrades to a bare placeholder. Earlier layers
+        # (residential fetcher) can burn the entire budget; without this
+        # exemption those stories end up with no visual identity at all.
         image_filename = await generate_favicon_composite(url)
 
     # ── Track which layer ultimately resolved the image ──

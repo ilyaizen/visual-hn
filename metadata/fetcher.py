@@ -45,6 +45,13 @@ RESIDENTIAL_FETCHER_SECRET = os.environ.get("VHN_RESIDENTIAL_FETCHER_SECRET", ""
 RESIDENTIAL_FETCHER_TIMEOUT = float(
     os.environ.get("VHN_RESIDENTIAL_FETCHER_TIMEOUT", "120")
 )
+# Cap on the residential fetcher's time budget when running under a deadline.
+# Without this, a hung residential call (node off, slow CF challenge) consumes
+# the entire metadata deadline and the screenshot/favicon layers never run.
+# Default leaves headroom for screenshot + favicon inside the 90s deadline.
+RESIDENTIAL_FETCHER_MAX_BUDGET = float(
+    os.environ.get("VHN_RESIDENTIAL_FETCHER_MAX_BUDGET", "45")
+)
 SCREENSHOT_TIMEOUT_SECONDS = float(os.environ.get("VHN_SCREENSHOT_TIMEOUT", "20"))
 CFFI_TIMEOUT = int(os.environ.get("VHN_CFFI_TIMEOUT", "25"))
 METADATA_DEADLINE_SECONDS = float(os.environ.get("VHN_METADATA_DEADLINE_SECONDS", "90"))
@@ -148,6 +155,9 @@ async def _curl_cffi_fetch_html(
                 if deadline
                 else RESIDENTIAL_FETCHER_TIMEOUT
             )
+            # Cap the residential budget so a hung node cannot consume the
+            # entire metadata deadline — later layers still get their turn.
+            remaining = min(remaining, RESIDENTIAL_FETCHER_MAX_BUDGET)
             if remaining <= 0:
                 logger.info(
                     "curl_cffi got %s for %s but deadline exhausted", status_code, url
