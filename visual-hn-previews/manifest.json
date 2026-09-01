@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Visual-HN",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Adds per item on hcker.news a 16:9 story thumbnail, a favicon before the title, and the og description on its own line, plus hover preview, a click lightbox with zoom controls, and an on-site toggle — powered by the Visual-HN API.",
   "permissions": ["storage"],
   "host_permissions": [

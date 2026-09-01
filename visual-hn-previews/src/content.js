@@ -865,7 +865,12 @@
 
     vhnSectionEl = settingsPanel.querySelector('#vhn-previews-settings-section');
     if (!vhnSectionEl) {
-      const targetPanel = settingsPanel.querySelector('.settings-tab-panel') || settingsPanel;
+      // hcker.news now keeps closed settings inside #settings-content. Inserting
+      // at the sticky panel root leaves this section visible on every refresh.
+      const targetPanel =
+        settingsPanel.querySelector('.settings-tab-panel') ||
+        settingsPanel.querySelector('#settings-content') ||
+        settingsPanel;
       const wrapper = targetPanel.querySelector('.settings-sections-wrapper') || targetPanel;
       vhnSectionEl = buildVhnSection();
       wrapper.prepend(vhnSectionEl);
