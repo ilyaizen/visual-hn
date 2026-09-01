@@ -126,6 +126,14 @@ def test_header_rebrand_script_targets_header_title_without_rebranding_descripto
     assert "TITLE_RE = /^hcker\\.news$/i" in script
 
 
+def test_extension_loads_header_rebrand_on_hcker_news():
+    manifest = json.loads((hcker_proxy.EXTENSION_DIR / "manifest.json").read_text())
+    scripts = manifest["content_scripts"][0]["js"]
+
+    assert "src/header-rebrand.js" in scripts
+    assert scripts.index("src/header-rebrand.js") < scripts.index("src/content.js")
+
+
 def test_normalize_rocket_loader_script_types_restores_executable_scripts():
     html = (
         '<script type="abc-module" crossorigin src="/assets/main.js"></script>'
