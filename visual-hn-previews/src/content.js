@@ -13,6 +13,7 @@
   let settings = { ...DEFAULT_SETTINGS, ...WEB_DEFAULTS };
   let scanScheduled = false;
   let observer = null;
+  let lastPointerMoveAt = -1;
 
   // Live coverage counters for the status line.
   const stats = { matched: 0, loaded: 0, apiOk: null };
@@ -104,6 +105,7 @@
       }
     } else {
       // Larger floating preview card on hover (xs only, CSS-driven).
+      const createdAt = performance.now();
       const preview = document.createElement('span');
       preview.className = 'vhn-preview';
       const pimg = document.createElement('img');
@@ -132,6 +134,18 @@
       }
       preview.appendChild(meta);
       wrap._preview = preview; // appended after the frame below
+
+      // Do not open a card just because a newly-injected thumb materialized
+      // under a stationary cursor during refresh. It opens only after the
+      // pointer has moved since this thumb was created and then entered it.
+      wrap.addEventListener('mouseenter', () => {
+        if (lastPointerMoveAt > createdAt) {
+          wrap.classList.add('vhn-preview-open');
+        }
+      });
+      wrap.addEventListener('mouseleave', () => {
+        wrap.classList.remove('vhn-preview-open');
+      });
 
       thumb.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -964,6 +978,9 @@
 
   // ---------------------------------------------------------------- init
   async function init() {
+    document.addEventListener('pointermove', () => {
+      lastPointerMoveAt = performance.now();
+    }, { passive: true });
     await loadSettings();
     applyEnabledState();
     applyHoverPreviewState();

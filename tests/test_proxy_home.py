@@ -166,8 +166,12 @@ def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     assert "width: 120px;" in css
     assert "background: var(--surface-1, #fff);" in css
     assert "color: var(--ink, inherit);" in css
+    assert "let lastPointerMoveAt = -1;" in script
+    assert "lastPointerMoveAt > createdAt" in script
     assert ".vhn-preview {\n  visibility: hidden;" in css
-    assert ".vhn-thumb-wrap:hover .vhn-preview {\n  visibility: visible;" in css
+    assert ".vhn-thumb-wrap.vhn-preview-open .vhn-preview {\n  visibility: visible;" in css
+    assert ".vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-open .vhn-preview {\n  visibility: hidden;" in css
+    assert ".vhn-thumb-wrap:hover .vhn-preview" not in css
 
 
 # ── Cache control ────────────────────────────────────────────────────────────

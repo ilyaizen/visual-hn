@@ -271,14 +271,14 @@
   white-space: nowrap;
 }
 
-.vhn-thumb-wrap:hover .vhn-preview {
+.vhn-thumb-wrap.vhn-preview-open .vhn-preview {
   visibility: visible;
   opacity: 1;
   transform: translateY(0) scale(1);
 }
 
 /* When hover preview is disabled via settings toggle */
-.vhn-hover-disabled .vhn-thumb-wrap:hover .vhn-preview {
+.vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-open .vhn-preview {
   visibility: hidden;
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
