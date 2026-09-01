@@ -36,7 +36,7 @@ def _get_feed_enrichment():
 
 HCKER_NEWS_ORIGIN = "https://hcker.news"
 EXTENSION_DIR = Path(__file__).parent / "visual-hn-previews"
-PREVIEW_RUNTIME_VERSION = "20260720-v46"
+PREVIEW_RUNTIME_VERSION = "20260720-v47"
 
 # ── Simple TTL cache for upstream fetches ──────────────────────────────────
 # Avoids re-fetching hcker.news on every single request.  Two-tier TTL:
@@ -333,7 +333,7 @@ def inject_preview_assets(html: str) -> str:
     config = (
         "<script>document.documentElement.classList.add('js');"
         "window.VHN_WEB_DEFAULTS = { enabled: true, "
-        'apiBase: window.location.origin, imageSize: "md", showFavicons: true, showDescriptions: true, showHoverPreview: false };</script>'
+        'apiBase: window.location.origin, imageSize: "xs", showFavicons: true, showDescriptions: true, showHoverPreview: false };</script>'
     )
     css = f'<link rel="stylesheet" href="/visual-hn-previews/styles/overlay.css?v={PREVIEW_RUNTIME_VERSION}" />'
     scripts = "\n".join(

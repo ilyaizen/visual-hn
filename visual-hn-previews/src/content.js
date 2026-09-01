@@ -5,7 +5,7 @@
 (function () {
   const HANDLED_ATTR = 'data-vhn-thumb'; // marks an injected story container
   // imageSize: 'xs' (small fixed column) | 'md' (medium fixed column) | 'large' (block above title)
-  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'md', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
+  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
   const WEB_DEFAULTS = window.VHN_WEB_DEFAULTS || {};
   const hasChromeStorage =
     typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
@@ -256,8 +256,8 @@
     }
 
     // textHost = where favicon/description land. In xs mode the site's own
-    // children move into a right-hand text column so the thumb becomes a fixed
-    // left column (flex row); in large mode they stay on the host.
+    // children stay in the left text column and the thumb is the fixed right
+    // column; in large mode they stay on the host.
     let textHost = host;
     if (large) {
       // Large mode: insert thumb AFTER the description (which is appended to textHost)
@@ -279,9 +279,8 @@
       const text = document.createElement('div');
       text.className = 'vhn-xs-text';
       while (host.firstChild) text.appendChild(host.firstChild);
-      // Small mode: image must be FIRST child for flex layout (left column)
-      host.appendChild(node);
       host.appendChild(text);
+      host.appendChild(node);
       textHost = text;
 
       // Favicon immediately before the title text (inline, in the title's line).
@@ -335,8 +334,8 @@
       text.className = 'vhn-xs-text';
       while (host.firstChild) text.appendChild(host.firstChild);
       node = buildSpacer();
-      host.appendChild(node);
       host.appendChild(text);
+      host.appendChild(node);
     }
 
     // Badge the gray fallback with its front-page rank, mirroring real
@@ -721,12 +720,12 @@
       '<div class="settings-options">' +
       '<div class="vhn-custom-dropdown" id="vhn-size-dropdown">' +
       '<button type="button" class="vhn-dropdown-trigger" id="vhn-size-trigger" aria-haspopup="listbox" aria-expanded="false">' +
-      '<span class="vhn-dropdown-selected-text">Medium</span>' +
+      '<span class="vhn-dropdown-selected-text">Small</span>' +
       '<svg class="vhn-dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</button>' +
       '<div class="vhn-dropdown-menu" id="vhn-size-menu" role="listbox" aria-hidden="true">' +
-      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="xs">Small</button>' +
-      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-size="md">Medium</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-size="xs">Small</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="md">Medium</button>' +
       '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="large">Large</button>' +
       '</div>' +
       '</div>' +

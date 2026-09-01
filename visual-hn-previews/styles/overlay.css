@@ -98,7 +98,7 @@
   color: var(--story-title-hover-color, #ff6600);
 }
 
-/* ----- extra-small mode: fixed left column, text in a right column ----- */
+/* ----- extra-small mode: fixed right column, text on the left ----- */
 .vhn-xs-host {
   display: flex;
   align-items: flex-start;
@@ -110,8 +110,8 @@
 }
 .vhn-thumb-wrap.vhn-xs {
   flex: none;
-  width: 80px;
-  max-width: 80px;
+  width: 120px;
+  max-width: 120px;
   margin: 2px 0;
 }
 .vhn-thumb-wrap.vhn-xs .vhn-thumb {
@@ -217,6 +217,7 @@
 
 /* ----- hover preview card (no layout shift: absolutely positioned) ----- */
 .vhn-preview {
+  visibility: hidden;
   position: absolute;
   left: 0;
   top: calc(100% + 8px);
@@ -271,12 +272,14 @@
 }
 
 .vhn-thumb-wrap:hover .vhn-preview {
+  visibility: visible;
   opacity: 1;
   transform: translateY(0) scale(1);
 }
 
 /* When hover preview is disabled via settings toggle */
 .vhn-hover-disabled .vhn-thumb-wrap:hover .vhn-preview {
+  visibility: hidden;
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
 }
@@ -503,7 +506,7 @@
   border: 1px solid var(--button-border-color, #b8b8b0);
   border-radius: 3px;
   background: var(--button-bg-color, #e8e8e0);
-  color: var(--text-color, inherit);
+  color: var(--ink, inherit);
   font: inherit;
   font-size: 14.4px;
   cursor: pointer;
@@ -523,7 +526,7 @@
   margin-top: 2px;
   border: 1px solid var(--button-border-color, #b8b8b0);
   border-radius: 6px;
-  background: var(--dropdown-bg-color, #fff);
+  background: var(--surface-1, #fff);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   overflow: hidden;
 }
@@ -538,7 +541,7 @@
   padding: 8px 12px;
   border: 0;
   background: transparent;
-  color: var(--text-color, inherit);
+  color: var(--ink, inherit);
   font: inherit;
   font-size: 14.4px;
   text-align: left;
@@ -546,7 +549,7 @@
 }
 
 .vhn-dropdown-option:hover {
-  background: var(--button-hover-bg-color, rgba(0, 0, 0, 0.05));
+  background: var(--hover-bg-color, rgba(0, 0, 0, 0.05));
 }
 
 .vhn-dropdown-option.active {

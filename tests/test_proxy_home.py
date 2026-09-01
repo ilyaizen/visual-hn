@@ -90,7 +90,7 @@ def test_inject_preview_assets_inserts_runtime_config_for_same_origin_api():
 
     assert "window.VHN_WEB_DEFAULTS" in html
     assert "apiBase: window.location.origin" in html
-    assert 'imageSize: "md"' in html
+    assert 'imageSize: "xs"' in html
     assert "showFavicons: true" in html
 
 
@@ -139,19 +139,27 @@ def test_normalize_rocket_loader_script_types_restores_executable_scripts():
     assert "data-cf-settings" not in normalized
 
 
-def test_content_script_defaults_to_small_images_and_favicons_enabled():
+def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     script = (hcker_proxy.EXTENSION_DIR / "src" / "content.js").read_text()
+    css = (hcker_proxy.EXTENSION_DIR / "styles" / "overlay.css").read_text()
 
     assert (
-        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'md', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };"
+        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };"
         in script
     )
+    assert 'data-vhn-size="xs">Small</button>' in script
     assert 'data-vhn-size="md">Medium</button>' in script
-    assert script.index('data-vhn-size="md">Medium</button>') < script.index(
-        'data-vhn-size="large">Large</button>'
+    assert script.index('data-vhn-size="xs">Small</button>') < script.index(
+        'data-vhn-size="md">Medium</button>'
     )
+    assert "host.appendChild(text);\n      host.appendChild(node);" in script
     assert 'id="vhn-show-favicons"' in script
     assert "entry.favicon && settings.showFavicons" in script
+    assert "width: 120px;" in css
+    assert "background: var(--surface-1, #fff);" in css
+    assert "color: var(--ink, inherit);" in css
+    assert ".vhn-preview {\n  visibility: hidden;" in css
+    assert ".vhn-thumb-wrap:hover .vhn-preview {\n  visibility: visible;" in css
 
 
 # ── Cache control ────────────────────────────────────────────────────────────
