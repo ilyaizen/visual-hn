@@ -5,7 +5,7 @@
 (function () {
   const HANDLED_ATTR = 'data-vhn-thumb'; // marks an injected story container
   // imageSize: 'xs' (small fixed column) | 'md' (medium fixed column) | 'large' (block above title)
-  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
+  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
   const WEB_DEFAULTS = window.VHN_WEB_DEFAULTS || {};
   const hasChromeStorage =
     typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
@@ -65,7 +65,7 @@
   function buildThumb(entry, opts) {
     const large = opts.large;
     const wrap = document.createElement(large ? 'a' : 'span');
-    wrap.className = 'vhn-thumb-wrap ' + (large ? 'vhn-large' : 'vhn-' + settings.imageSize) + ' vhn-ar-' + settings.aspectRatio;
+    wrap.className = 'vhn-thumb-wrap ' + (large ? 'vhn-large' : 'vhn-' + settings.imageSize) + ' vhn-ar-' + settings.aspectRatio + ' vhn-pos-' + settings.imagePosition;
     if (large && opts.storyHref) wrap.href = opts.storyHref;
 
     // Clipped frame so the 10% zoom (scale 1.1) is cropped to the 16:9 box
@@ -237,7 +237,7 @@
   function buildSpacer() {
     const wrap = document.createElement('span');
     const sizeClass = settings.imageSize === 'large' ? 'vhn-large' : 'vhn-' + settings.imageSize;
-    wrap.className = 'vhn-thumb-wrap vhn-spacer ' + sizeClass + ' vhn-ar-' + settings.aspectRatio;
+    wrap.className = 'vhn-thumb-wrap vhn-spacer ' + sizeClass + ' vhn-ar-' + settings.aspectRatio + ' vhn-pos-' + settings.imagePosition;
     const frame = document.createElement('span');
     frame.className = 'vhn-thumb-frame';
     const spacer = document.createElement('span');
@@ -269,9 +269,8 @@
       if (badge) node.appendChild(badge);
     }
 
-    // textHost = where favicon/description land. In xs mode the site's own
-    // children stay in the left text column and the thumb is the fixed right
-    // column; in large mode they stay on the host.
+    // textHost = where favicon/description land. In xs/md mode the image sits
+    // beside the site's text in the persisted left/right position.
     let textHost = host;
     if (large) {
       // Large mode: insert thumb AFTER the description (which is appended to textHost)
@@ -293,8 +292,13 @@
       const text = document.createElement('div');
       text.className = 'vhn-xs-text';
       while (host.firstChild) text.appendChild(host.firstChild);
-      host.appendChild(text);
-      host.appendChild(node);
+      if (settings.imagePosition === 'right') {
+        host.appendChild(text);
+        host.appendChild(node);
+      } else {
+        host.appendChild(node);
+        host.appendChild(text);
+      }
       textHost = text;
 
       // Favicon immediately before the title text (inline, in the title's line).
@@ -348,8 +352,13 @@
       text.className = 'vhn-xs-text';
       while (host.firstChild) text.appendChild(host.firstChild);
       node = buildSpacer();
-      host.appendChild(text);
-      host.appendChild(node);
+      if (settings.imagePosition === 'right') {
+        host.appendChild(text);
+        host.appendChild(node);
+      } else {
+        host.appendChild(node);
+        host.appendChild(text);
+      }
     }
 
     // Badge the gray fallback with its front-page rank, mirroring real
@@ -434,6 +443,14 @@
     if (settings.aspectRatio === value) return;
     settings.aspectRatio = value;
     await saveSetting('aspectRatio', value);
+    reapplyInjections();
+    renderVhnSettings();
+  }
+
+  async function setImagePosition(value) {
+    if (settings.imagePosition === value) return;
+    settings.imagePosition = value;
+    await saveSetting('imagePosition', value);
     reapplyInjections();
     renderVhnSettings();
   }
@@ -762,6 +779,13 @@
       '</div>' +
       '</div>' +
       '<div class="settings-row">' +
+      '<span class="settings-label">Image Position</span>' +
+      '<div class="settings-options"><div class="vhn-position-toggle" role="radiogroup" aria-label="Image position">' +
+      '<button type="button" class="vhn-position-option" role="radio" data-vhn-position="left" aria-checked="true">Left</button>' +
+      '<button type="button" class="vhn-position-option" role="radio" data-vhn-position="right" aria-checked="false">Right</button>' +
+      '</div></div>' +
+      '</div>' +
+      '<div class="settings-row">' +
       '<label class="settings-label" for="vhn-show-favicons">Title favicons</label>' +
       '<div class="settings-options"><label class="toggle-switch"><input type="checkbox" id="vhn-show-favicons"><span class="toggle-slider"></span></label></div>' +
       '</div>' +
@@ -819,6 +843,10 @@
       });
     });
 
+    section.querySelectorAll('.vhn-position-option').forEach((opt) => {
+      opt.addEventListener('click', () => setImagePosition(opt.getAttribute('data-vhn-position')));
+    });
+
     // Close dropdowns on outside click
     document.addEventListener('click', () => closeAllDropdowns(section));
 
@@ -859,6 +887,14 @@
     });
   }
 
+  function updateImagePositionToggle(section) {
+    section.querySelectorAll('.vhn-position-option').forEach((opt) => {
+      const active = opt.getAttribute('data-vhn-position') === settings.imagePosition;
+      opt.classList.toggle('active', active);
+      opt.setAttribute('aria-checked', String(active));
+    });
+  }
+
   function ensureVhnSettingsPanel() {
     const settingsPanel = findSettingsPanel();
     if (!settingsPanel) return false;
@@ -885,6 +921,7 @@
 
     updateDropdownText('#vhn-size-trigger', '#vhn-size-menu', settings.imageSize);
     updateDropdownText('#vhn-ar-trigger', '#vhn-ar-menu', settings.aspectRatio);
+    updateImagePositionToggle(vhnPanelEl);
 
     const showFavicons = vhnPanelEl.querySelector('#vhn-show-favicons');
     if (showFavicons && showFavicons.checked !== settings.showFavicons) showFavicons.checked = settings.showFavicons;
@@ -1022,7 +1059,7 @@
         if (area !== 'sync') return;
         loadSettings().then(() => {
           applyEnabledState();
-          if (changes.imageSize || changes.aspectRatio || changes.showFavicons || changes.showDescriptions) reapplyInjections();
+          if (changes.imageSize || changes.aspectRatio || changes.imagePosition || changes.showFavicons || changes.showDescriptions) reapplyInjections();
           if (changes.showHoverPreview) applyHoverPreviewState();
         });
       });
