@@ -5,7 +5,7 @@
 (function () {
   const HANDLED_ATTR = 'data-vhn-thumb'; // marks an injected story container
   // imageSize: 'xs' (small fixed column) | 'md' (medium fixed column) | 'large' (block above title)
-  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'md', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
+  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
   const WEB_DEFAULTS = window.VHN_WEB_DEFAULTS || {};
   const hasChromeStorage =
     typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
@@ -13,6 +13,7 @@
   let settings = { ...DEFAULT_SETTINGS, ...WEB_DEFAULTS };
   let scanScheduled = false;
   let observer = null;
+  let lastPointerMoveAt = -1;
 
   // Live coverage counters for the status line.
   const stats = { matched: 0, loaded: 0, apiOk: null };
@@ -64,7 +65,7 @@
   function buildThumb(entry, opts) {
     const large = opts.large;
     const wrap = document.createElement(large ? 'a' : 'span');
-    wrap.className = 'vhn-thumb-wrap ' + (large ? 'vhn-large' : 'vhn-' + settings.imageSize) + ' vhn-ar-' + settings.aspectRatio;
+    wrap.className = 'vhn-thumb-wrap ' + (large ? 'vhn-large' : 'vhn-' + settings.imageSize) + ' vhn-ar-' + settings.aspectRatio + ' vhn-pos-' + settings.imagePosition;
     if (large && opts.storyHref) wrap.href = opts.storyHref;
 
     // Clipped frame so the 10% zoom (scale 1.1) is cropped to the 16:9 box
@@ -104,6 +105,7 @@
       }
     } else {
       // Larger floating preview card on hover (xs only, CSS-driven).
+      const createdAt = performance.now();
       const preview = document.createElement('span');
       preview.className = 'vhn-preview';
       const pimg = document.createElement('img');
@@ -132,6 +134,18 @@
       }
       preview.appendChild(meta);
       wrap._preview = preview; // appended after the frame below
+
+      // Do not open a card just because a newly-injected thumb materialized
+      // under a stationary cursor during refresh. It opens only after the
+      // pointer has moved since this thumb was created and then entered it.
+      wrap.addEventListener('mouseenter', () => {
+        if (lastPointerMoveAt > createdAt) {
+          wrap.classList.add('vhn-preview-open');
+        }
+      });
+      wrap.addEventListener('mouseleave', () => {
+        wrap.classList.remove('vhn-preview-open');
+      });
 
       thumb.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -223,7 +237,7 @@
   function buildSpacer() {
     const wrap = document.createElement('span');
     const sizeClass = settings.imageSize === 'large' ? 'vhn-large' : 'vhn-' + settings.imageSize;
-    wrap.className = 'vhn-thumb-wrap vhn-spacer ' + sizeClass + ' vhn-ar-' + settings.aspectRatio;
+    wrap.className = 'vhn-thumb-wrap vhn-spacer ' + sizeClass + ' vhn-ar-' + settings.aspectRatio + ' vhn-pos-' + settings.imagePosition;
     const frame = document.createElement('span');
     frame.className = 'vhn-thumb-frame';
     const spacer = document.createElement('span');
@@ -255,9 +269,8 @@
       if (badge) node.appendChild(badge);
     }
 
-    // textHost = where favicon/description land. In xs mode the site's own
-    // children move into a right-hand text column so the thumb becomes a fixed
-    // left column (flex row); in large mode they stay on the host.
+    // textHost = where favicon/description land. In xs/md mode the image sits
+    // beside the site's text in the persisted left/right position.
     let textHost = host;
     if (large) {
       // Large mode: insert thumb AFTER the description (which is appended to textHost)
@@ -279,9 +292,13 @@
       const text = document.createElement('div');
       text.className = 'vhn-xs-text';
       while (host.firstChild) text.appendChild(host.firstChild);
-      // Small mode: image must be FIRST child for flex layout (left column)
-      host.appendChild(node);
-      host.appendChild(text);
+      if (settings.imagePosition === 'right') {
+        host.appendChild(text);
+        host.appendChild(node);
+      } else {
+        host.appendChild(node);
+        host.appendChild(text);
+      }
       textHost = text;
 
       // Favicon immediately before the title text (inline, in the title's line).
@@ -335,8 +352,13 @@
       text.className = 'vhn-xs-text';
       while (host.firstChild) text.appendChild(host.firstChild);
       node = buildSpacer();
-      host.appendChild(node);
-      host.appendChild(text);
+      if (settings.imagePosition === 'right') {
+        host.appendChild(text);
+        host.appendChild(node);
+      } else {
+        host.appendChild(node);
+        host.appendChild(text);
+      }
     }
 
     // Badge the gray fallback with its front-page rank, mirroring real
@@ -421,6 +443,14 @@
     if (settings.aspectRatio === value) return;
     settings.aspectRatio = value;
     await saveSetting('aspectRatio', value);
+    reapplyInjections();
+    renderVhnSettings();
+  }
+
+  async function setImagePosition(value) {
+    if (settings.imagePosition === value) return;
+    settings.imagePosition = value;
+    await saveSetting('imagePosition', value);
     reapplyInjections();
     renderVhnSettings();
   }
@@ -721,12 +751,12 @@
       '<div class="settings-options">' +
       '<div class="vhn-custom-dropdown" id="vhn-size-dropdown">' +
       '<button type="button" class="vhn-dropdown-trigger" id="vhn-size-trigger" aria-haspopup="listbox" aria-expanded="false">' +
-      '<span class="vhn-dropdown-selected-text">Medium</span>' +
+      '<span class="vhn-dropdown-selected-text">Small</span>' +
       '<svg class="vhn-dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</button>' +
       '<div class="vhn-dropdown-menu" id="vhn-size-menu" role="listbox" aria-hidden="true">' +
-      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="xs">Small</button>' +
-      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-size="md">Medium</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-size="xs">Small</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="md">Medium</button>' +
       '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="large">Large</button>' +
       '</div>' +
       '</div>' +
@@ -747,6 +777,13 @@
       '</div>' +
       '</div>' +
       '</div>' +
+      '</div>' +
+      '<div class="settings-row">' +
+      '<span class="settings-label">Image Position</span>' +
+      '<div class="settings-options"><div class="vhn-position-toggle" role="radiogroup" aria-label="Image position">' +
+      '<button type="button" class="vhn-position-option" role="radio" data-vhn-position="left" aria-checked="true">Left</button>' +
+      '<button type="button" class="vhn-position-option" role="radio" data-vhn-position="right" aria-checked="false">Right</button>' +
+      '</div></div>' +
       '</div>' +
       '<div class="settings-row">' +
       '<label class="settings-label" for="vhn-show-favicons">Title favicons</label>' +
@@ -806,6 +843,10 @@
       });
     });
 
+    section.querySelectorAll('.vhn-position-option').forEach((opt) => {
+      opt.addEventListener('click', () => setImagePosition(opt.getAttribute('data-vhn-position')));
+    });
+
     // Close dropdowns on outside click
     document.addEventListener('click', () => closeAllDropdowns(section));
 
@@ -846,13 +887,26 @@
     });
   }
 
+  function updateImagePositionToggle(section) {
+    section.querySelectorAll('.vhn-position-option').forEach((opt) => {
+      const active = opt.getAttribute('data-vhn-position') === settings.imagePosition;
+      opt.classList.toggle('active', active);
+      opt.setAttribute('aria-checked', String(active));
+    });
+  }
+
   function ensureVhnSettingsPanel() {
     const settingsPanel = findSettingsPanel();
     if (!settingsPanel) return false;
 
     vhnSectionEl = settingsPanel.querySelector('#vhn-previews-settings-section');
     if (!vhnSectionEl) {
-      const targetPanel = settingsPanel.querySelector('.settings-tab-panel') || settingsPanel;
+      // hcker.news now keeps closed settings inside #settings-content. Inserting
+      // at the sticky panel root leaves this section visible on every refresh.
+      const targetPanel =
+        settingsPanel.querySelector('.settings-tab-panel') ||
+        settingsPanel.querySelector('#settings-content') ||
+        settingsPanel;
       const wrapper = targetPanel.querySelector('.settings-sections-wrapper') || targetPanel;
       vhnSectionEl = buildVhnSection();
       wrapper.prepend(vhnSectionEl);
@@ -867,6 +921,7 @@
 
     updateDropdownText('#vhn-size-trigger', '#vhn-size-menu', settings.imageSize);
     updateDropdownText('#vhn-ar-trigger', '#vhn-ar-menu', settings.aspectRatio);
+    updateImagePositionToggle(vhnPanelEl);
 
     const showFavicons = vhnPanelEl.querySelector('#vhn-show-favicons');
     if (showFavicons && showFavicons.checked !== settings.showFavicons) showFavicons.checked = settings.showFavicons;
@@ -965,6 +1020,9 @@
 
   // ---------------------------------------------------------------- init
   async function init() {
+    document.addEventListener('pointermove', () => {
+      lastPointerMoveAt = performance.now();
+    }, { passive: true });
     await loadSettings();
     applyEnabledState();
     applyHoverPreviewState();
@@ -1001,7 +1059,7 @@
         if (area !== 'sync') return;
         loadSettings().then(() => {
           applyEnabledState();
-          if (changes.imageSize || changes.aspectRatio || changes.showFavicons || changes.showDescriptions) reapplyInjections();
+          if (changes.imageSize || changes.aspectRatio || changes.imagePosition || changes.showFavicons || changes.showDescriptions) reapplyInjections();
           if (changes.showHoverPreview) applyHoverPreviewState();
         });
       });

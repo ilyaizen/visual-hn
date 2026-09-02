@@ -9,8 +9,9 @@
   display: none !important;
 }
 
-/* ----- thumbnail (16:9, block BELOW the description, ~w-lg) ----- */
+/* ----- thumbnail ----- */
 .vhn-thumb-wrap {
+  --vhn-thumb-aspect: 16 / 9;
   position: relative;
   display: block;
   width: 100%;
@@ -36,12 +37,12 @@
 .vhn-thumb-spacer {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--vhn-thumb-aspect);
   background: rgba(127, 127, 127, 0.08);
   box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
-.vhn-thumb-wrap.vhn-ar-square .vhn-thumb-spacer { aspect-ratio: 1 / 1; }
-.vhn-thumb-wrap.vhn-ar-portrait .vhn-thumb-spacer { aspect-ratio: 3 / 4; }
+.vhn-thumb-wrap.vhn-ar-square { --vhn-thumb-aspect: 1 / 1; }
+.vhn-thumb-wrap.vhn-ar-portrait { --vhn-thumb-aspect: 3 / 4; }
 
 /* Stacking root-cause fix: every .vhn-thumb-wrap is a `position:relative`
    stacking context at z-index:1, so the preview's z-index only ranks it
@@ -56,7 +57,7 @@
 .vhn-thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--vhn-thumb-aspect);
   object-fit: cover;
   cursor: zoom-in;
   background: #ffffff; /* white behind transparent PNGs; clipped by frame's
@@ -98,7 +99,7 @@
   color: var(--story-title-hover-color, #ff6600);
 }
 
-/* ----- extra-small mode: fixed left column, text in a right column ----- */
+/* ----- extra-small mode: fixed right column, text on the left ----- */
 .vhn-xs-host {
   display: flex;
   align-items: flex-start;
@@ -110,8 +111,8 @@
 }
 .vhn-thumb-wrap.vhn-xs {
   flex: none;
-  width: 80px;
-  max-width: 80px;
+  width: 120px;
+  max-width: 120px;
   margin: 2px 0;
 }
 .vhn-thumb-wrap.vhn-xs .vhn-thumb {
@@ -133,29 +134,6 @@
   transform: scale(2.5); /* zoomed-in: ~40% visible, centered; ease-in-out to 80% on hover */
   transform-origin: center;
   transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/* ----- aspect ratio overrides (landscape = 4:3, portrait = 3:4) ----- */
-/* Square: 1:1 */
-.vhn-thumb-wrap.vhn-ar-square .vhn-thumb {
-  aspect-ratio: 1 / 1;
-}
-.vhn-thumb-wrap.vhn-xs.vhn-ar-square .vhn-thumb {
-  height: 80px;
-}
-.vhn-thumb-wrap.vhn-md.vhn-ar-square .vhn-thumb {
-  height: 200px;
-}
-
-/* Portrait: 3:4 */
-.vhn-thumb-wrap.vhn-ar-portrait .vhn-thumb {
-  aspect-ratio: 3 / 4;
-}
-.vhn-thumb-wrap.vhn-xs.vhn-ar-portrait .vhn-thumb {
-  height: 107px;
-}
-.vhn-thumb-wrap.vhn-md.vhn-ar-portrait .vhn-thumb {
-  height: 267px;
 }
 
 /* ----- inline favicon (before the title) + description (new line) ----- */
@@ -217,9 +195,10 @@
 
 /* ----- hover preview card (no layout shift: absolutely positioned) ----- */
 .vhn-preview {
+  visibility: hidden;
   position: absolute;
-  left: 0;
-  top: calc(100% + 8px);
+  left: calc(100% + 8px);
+  top: 0;
   z-index: 99;
   width: 360px;
   max-width: 80vw;
@@ -234,6 +213,14 @@
   transition:
     opacity 0.16s ease,
     transform 0.16s ease;
+}
+
+/* Preview always expands toward the story text: right of a left-side image,
+   left of a right-side image. This avoids covering the next story row. */
+.vhn-thumb-wrap.vhn-pos-right .vhn-preview {
+  right: calc(100% + 8px);
+  left: auto;
+  transform-origin: top right;
 }
 
 .vhn-preview-img {
@@ -270,13 +257,15 @@
   white-space: nowrap;
 }
 
-.vhn-thumb-wrap:hover .vhn-preview {
+.vhn-thumb-wrap.vhn-preview-open .vhn-preview {
+  visibility: visible;
   opacity: 1;
   transform: translateY(0) scale(1);
 }
 
 /* When hover preview is disabled via settings toggle */
-.vhn-hover-disabled .vhn-thumb-wrap:hover .vhn-preview {
+.vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-open .vhn-preview {
+  visibility: hidden;
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
 }
@@ -503,7 +492,7 @@
   border: 1px solid var(--button-border-color, #b8b8b0);
   border-radius: 3px;
   background: var(--button-bg-color, #e8e8e0);
-  color: var(--text-color, inherit);
+  color: var(--ink, inherit);
   font: inherit;
   font-size: 14.4px;
   cursor: pointer;
@@ -523,7 +512,7 @@
   margin-top: 2px;
   border: 1px solid var(--button-border-color, #b8b8b0);
   border-radius: 6px;
-  background: var(--dropdown-bg-color, #fff);
+  background: var(--surface-1, #fff);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   overflow: hidden;
 }
@@ -538,7 +527,7 @@
   padding: 8px 12px;
   border: 0;
   background: transparent;
-  color: var(--text-color, inherit);
+  color: var(--ink, inherit);
   font: inherit;
   font-size: 14.4px;
   text-align: left;
@@ -546,10 +535,34 @@
 }
 
 .vhn-dropdown-option:hover {
-  background: var(--button-hover-bg-color, rgba(0, 0, 0, 0.05));
+  background: var(--hover-bg-color, rgba(0, 0, 0, 0.05));
 }
 
 .vhn-dropdown-option.active {
+  background: var(--accent-color, #ff6600);
+  color: #fff;
+}
+
+/* Two-state position control: less ambiguous than a "position right" checkbox. */
+.vhn-position-toggle {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--button-border-color, #b8b8b0);
+  border-radius: 3px;
+}
+.vhn-position-option {
+  border: 0;
+  padding: 8px 12px;
+  background: var(--button-bg-color, #e8e8e0);
+  color: var(--ink, inherit);
+  font: inherit;
+  font-size: 14.4px;
+  cursor: pointer;
+}
+.vhn-position-option + .vhn-position-option {
+  border-left: 1px solid var(--button-border-color, #b8b8b0);
+}
+.vhn-position-option.active {
   background: var(--accent-color, #ff6600);
   color: #fff;
 }
@@ -742,20 +755,15 @@
     margin: 4px 0 10px !important;
   }
 
-  /* Landscape aspect ratio, no zoom-reveal effect */
+  /* Keep the chosen aspect ratio; default remains landscape. */
   .vhn-thumb-wrap.vhn-md .vhn-thumb,
   .vhn-thumb-wrap.vhn-xs .vhn-thumb {
-    aspect-ratio: 16 / 9 !important;
     transform: scale(1.03) !important;
     transition: none !important;
     cursor: zoom-in;
   }
-  .vhn-thumb-wrap.vhn-md .vhn-thumb-spacer,
-  .vhn-thumb-wrap.vhn-xs .vhn-thumb-spacer {
-    aspect-ratio: 16 / 9;
-  }
 
-  /* Rank badge sizing for full-width portrait thumbs */
+  /* Rank badge sizing for full-width thumbs */
   .vhn-thumb-wrap.vhn-md .vhn-rank-badge,
   .vhn-thumb-wrap.vhn-xs .vhn-rank-badge {
     font-size: 11px;
@@ -766,11 +774,6 @@
   .vhn-thumb-wrap.vhn-md .vhn-rank-badge.vhn-rank-trophy,
   .vhn-thumb-wrap.vhn-xs .vhn-rank-badge.vhn-rank-trophy {
     font-size: 28px;
-  }
-
-  /* Large mode: also landscape on mobile */
-  .vhn-thumb-wrap.vhn-large .vhn-thumb {
-    aspect-ratio: 16 / 9 !important;
   }
 
   /* Lightbox: tighter padding on mobile */

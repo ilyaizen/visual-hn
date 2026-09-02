@@ -90,7 +90,7 @@ def test_inject_preview_assets_inserts_runtime_config_for_same_origin_api():
 
     assert "window.VHN_WEB_DEFAULTS" in html
     assert "apiBase: window.location.origin" in html
-    assert 'imageSize: "md"' in html
+    assert 'imageSize: "xs"' in html
     assert "showFavicons: true" in html
 
 
@@ -126,6 +126,14 @@ def test_header_rebrand_script_targets_header_title_without_rebranding_descripto
     assert "TITLE_RE = /^hcker\\.news$/i" in script
 
 
+def test_extension_loads_header_rebrand_on_hcker_news():
+    manifest = json.loads((hcker_proxy.EXTENSION_DIR / "manifest.json").read_text())
+    scripts = manifest["content_scripts"][0]["js"]
+
+    assert "src/header-rebrand.js" in scripts
+    assert scripts.index("src/header-rebrand.js") < scripts.index("src/content.js")
+
+
 def test_normalize_rocket_loader_script_types_restores_executable_scripts():
     html = (
         '<script type="abc-module" crossorigin src="/assets/main.js"></script>'
@@ -139,19 +147,37 @@ def test_normalize_rocket_loader_script_types_restores_executable_scripts():
     assert "data-cf-settings" not in normalized
 
 
-def test_content_script_defaults_to_small_images_and_favicons_enabled():
+def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     script = (hcker_proxy.EXTENSION_DIR / "src" / "content.js").read_text()
+    css = (hcker_proxy.EXTENSION_DIR / "styles" / "overlay.css").read_text()
 
     assert (
-        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'md', aspectRatio: 'landscape', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };"
+        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };"
         in script
     )
+    assert 'data-vhn-size="xs">Small</button>' in script
     assert 'data-vhn-size="md">Medium</button>' in script
-    assert script.index('data-vhn-size="md">Medium</button>') < script.index(
-        'data-vhn-size="large">Large</button>'
+    assert script.index('data-vhn-size="xs">Small</button>') < script.index(
+        'data-vhn-size="md">Medium</button>'
     )
+    assert 'data-vhn-position="left" aria-checked="true">Left</button>' in script
+    assert 'data-vhn-position="right" aria-checked="false">Right</button>' in script
+    assert "settings.imagePosition === 'right'" in script
+    assert "host.appendChild(node);\n        host.appendChild(text);" in script
+    assert "--vhn-thumb-aspect: 16 / 9;" in css
+    assert "aspect-ratio: var(--vhn-thumb-aspect);" in css
+    assert ".vhn-thumb-wrap.vhn-pos-right .vhn-preview" in css
     assert 'id="vhn-show-favicons"' in script
     assert "entry.favicon && settings.showFavicons" in script
+    assert "width: 120px;" in css
+    assert "background: var(--surface-1, #fff);" in css
+    assert "color: var(--ink, inherit);" in css
+    assert "let lastPointerMoveAt = -1;" in script
+    assert "lastPointerMoveAt > createdAt" in script
+    assert ".vhn-preview {\n  visibility: hidden;" in css
+    assert ".vhn-thumb-wrap.vhn-preview-open .vhn-preview {\n  visibility: visible;" in css
+    assert ".vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-open .vhn-preview {\n  visibility: hidden;" in css
+    assert ".vhn-thumb-wrap:hover .vhn-preview" not in css
 
 
 # ── Cache control ────────────────────────────────────────────────────────────
