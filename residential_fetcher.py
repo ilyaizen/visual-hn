@@ -33,6 +33,7 @@ import os
 import secrets
 import time
 from contextlib import asynccontextmanager, suppress
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -40,10 +41,22 @@ from fastapi import FastAPI, Header, HTTPException
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
+
+# Mirror logs to a rotating file. When launched hidden by Task Scheduler the
+# console handler is invisible, so browser pre-warm/relaunch failures (the
+# root cause of zombie driver processes) left no trace on disk. fetcher.log
+# is gitignored; rotation keeps it bounded.
+_file_handler = RotatingFileHandler(
+    Path(__file__).parent / "fetcher.log",
+    maxBytes=5 * 1024 * 1024,
+    backupCount=2,
+    encoding="utf-8",
 )
+_file_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+logging.getLogger().addHandler(_file_handler)
+
 logger = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("RESIDENTIAL_FETCHER_PORT", "18080"))
@@ -141,7 +154,11 @@ async def _ensure_browser() -> Any:
     async with _lock:
         if _browser_is_alive():
             return _browser
-        if _browser:
+        if _browser or _playwright:
+            # Teardown must run when EITHER is stale: a failed launch leaves
+            # _browser=None but _playwright set, and the running Playwright
+            # instance still holds a driver node process. Skipping teardown
+            # here leaks one driver node (~30 MB) per failed relaunch.
             logger.warning("Browser process died — relaunching")
             await _teardown_browser()
 
