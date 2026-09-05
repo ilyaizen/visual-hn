@@ -2,13 +2,13 @@
 # Visual-HN Residential Fetcher.
 #
 # Two tasks:
-#   1. VHN-ResidentialFetcher         — runs on login, starts the fetcher
-#   2. VHN-ResidentialFetcher-Watchdog — runs every 5 min, restarts the
+#   1. VHN-ResidentialFetcher         - runs on login, starts the fetcher
+#   2. VHN-ResidentialFetcher-Watchdog - runs every 5 min, restarts the
 #                                          fetcher if /health fails 3x
 #
 # The watchdog is the fix for the reliability gap where a dead Chromium
 # process leaves the fetcher task in "Running" state without actually
-# serving requests. See docs/DEPLOYMENT.md → "Known reliability gap".
+# serving requests. See docs/DEPLOYMENT.md -> "Known reliability gap".
 #
 # Usage:
 #   .\scripts\register-task.ps1              # register both
@@ -18,7 +18,7 @@ param(
     [switch]$Uninstall
 )
 
-# Halt on any registration error — without this, Register-ScheduledTask
+# Halt on any registration error - without this, Register-ScheduledTask
 # failures print to stderr but execution continues, producing misleading
 # "Registered" success messages for tasks that don't actually exist.
 $ErrorActionPreference = 'Stop'
@@ -38,7 +38,7 @@ if ($Uninstall) {
     exit 0
 }
 
-# Resolve launcher scripts (VBS wrappers for silent execution — no console window flash)
+# Resolve launcher scripts (VBS wrappers for silent execution - no console window flash)
 $FetcherLauncher  = (Resolve-Path "$PSScriptRoot\run-fetcher-silent.vbs").Path
 $WatchdogLauncher = (Resolve-Path "$PSScriptRoot\run-watchdog-silent.vbs").Path
 
@@ -59,7 +59,7 @@ $FetcherAction   = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "//n
 $FetcherTrigger  = New-ScheduledTaskTrigger -AtLogOn
 $FetcherSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
-Register-ScheduledTask -TaskName $FetcherTaskName -Action $FetcherAction -Trigger $FetcherTrigger -Settings $FetcherSettings -Description "Visual-HN headful residential fetcher — Cloudflare bypass (called by VPS)" -Force | Out-Null
+Register-ScheduledTask -TaskName $FetcherTaskName -Action $FetcherAction -Trigger $FetcherTrigger -Settings $FetcherSettings -Description "Visual-HN headful residential fetcher - Cloudflare bypass (called by VPS)" -Force | Out-Null
 Write-Host "Registered fetcher task: $FetcherTaskName (triggers AtLogOn)"
 
 # --- Register the watchdog task (every 5 min, independent of logon) ---
@@ -84,7 +84,7 @@ $WatchdogSettings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 2) `
     -MultipleInstances IgnoreNew
 
-Register-ScheduledTask -TaskName $WatchdogTaskName -Action $WatchdogAction -Trigger $WatchdogTrigger -Settings $WatchdogSettings -Description "Visual-HN watchdog — restarts the fetcher if /health fails 3x (5-min interval)" -Force | Out-Null
+Register-ScheduledTask -TaskName $WatchdogTaskName -Action $WatchdogAction -Trigger $WatchdogTrigger -Settings $WatchdogSettings -Description "Visual-HN watchdog - restarts the fetcher if /health fails 3x (5-min interval)" -Force | Out-Null
 Write-Host "Registered watchdog task: $WatchdogTaskName (every 5 min)"
 
 # --- Summary ---
