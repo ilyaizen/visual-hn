@@ -249,6 +249,18 @@
   transform-origin: top right;
 }
 
+/* Near the viewport bottom, anchor the card to the thumbnail's bottom edge
+   instead of letting its top-aligned version disappear below the fold. */
+.vhn-thumb-wrap.vhn-preview-flip-y .vhn-preview {
+  top: auto;
+  bottom: 0;
+  transform: translateY(6px) scale(0.98);
+  transform-origin: bottom left;
+}
+.vhn-thumb-wrap.vhn-pos-right.vhn-preview-flip-y .vhn-preview {
+  transform-origin: bottom right;
+}
+
 .vhn-preview-img {
   display: block;
   width: 100%;
@@ -288,12 +300,18 @@
   opacity: 1;
   transform: translateY(0) scale(1);
 }
+.vhn-thumb-wrap.vhn-preview-flip-y.vhn-preview-open .vhn-preview {
+  transform: translateY(-8px) scale(1);
+}
 
 /* When hover preview is disabled via settings toggle */
 .vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-open .vhn-preview {
   visibility: hidden;
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
+}
+.vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-flip-y.vhn-preview-open .vhn-preview {
+  transform: translateY(6px) scale(0.98);
 }
 
 /* ----- lightbox / modal (pan & zoom viewer) ----- */
@@ -735,12 +753,22 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
+/* Badge sits on the outer edge of a right-positioned thumbnail. */
+.vhn-thumb-wrap.vhn-pos-right .vhn-rank-badge {
+  right: 4px;
+  left: auto;
+}
+
 /* In large mode, scale up */
 .vhn-thumb-wrap.vhn-large .vhn-rank-badge {
   font-size: 11px;
   padding: 1px 6px;
   top: 6px;
   left: 6px;
+}
+.vhn-thumb-wrap.vhn-large.vhn-pos-right .vhn-rank-badge {
+  right: 6px;
+  left: auto;
 }
 .vhn-thumb-wrap.vhn-large .vhn-rank-badge.vhn-rank-trophy {
   font-size: 28px;
@@ -799,6 +827,12 @@
     padding: 1px 6px;
     top: 6px;
     left: 6px;
+  }
+  .vhn-thumb-wrap.vhn-pos-right.vhn-md .vhn-rank-badge,
+  .vhn-thumb-wrap.vhn-pos-right.vhn-xs .vhn-rank-badge,
+  .vhn-thumb-wrap.vhn-pos-right.vhn-xxs .vhn-rank-badge {
+    right: 6px;
+    left: auto;
   }
   .vhn-thumb-wrap.vhn-md .vhn-rank-badge.vhn-rank-trophy,
   .vhn-thumb-wrap.vhn-xs .vhn-rank-badge.vhn-rank-trophy,

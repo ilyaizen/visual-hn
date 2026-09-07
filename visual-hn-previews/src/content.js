@@ -136,11 +136,29 @@
       preview.appendChild(meta);
       wrap._preview = preview; // appended after the frame below
 
+      // Keep the floating card inside the viewport when the thumbnail is near
+      // the bottom edge. Visibility:hidden still participates in layout, so
+      // its rendered height is available before opening it.
+      const positionPreviewVertically = () => {
+        const previewHeight = preview.getBoundingClientRect().height;
+        const thumbTop = wrap.getBoundingClientRect().top;
+        wrap.classList.toggle(
+          'vhn-preview-flip-y',
+          previewHeight > 0 && thumbTop + previewHeight > window.innerHeight
+        );
+      };
+      pimg.addEventListener('load', () => {
+        if (wrap.classList.contains('vhn-preview-open')) {
+          positionPreviewVertically();
+        }
+      });
+
       // Do not open a card just because a newly-injected thumb materialized
       // under a stationary cursor during refresh. It opens only after the
       // pointer has moved since this thumb was created and then entered it.
       wrap.addEventListener('mouseenter', () => {
         if (lastPointerMoveAt > createdAt) {
+          positionPreviewVertically();
           wrap.classList.add('vhn-preview-open');
         }
       });
