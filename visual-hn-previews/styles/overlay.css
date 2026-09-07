@@ -780,15 +780,6 @@
   font-size: 10px;
 }
 
-/* ── Header grounding ──────────────────────────────────────────────────────
-   The sticky #header has no border-bottom or shadow in hcker.news's CSS.
-   Without it the bar looks like it floats above the story list. Add a
-   crisp bottom edge that adapts to light/dark themes via hcker.news's
-   own --line-strong variable. */
-#header {
-  border-bottom: 1px solid var(--line-strong, #ccc);
-}
-
 /* ── Mobile layout: portrait thumbnails, stacked ───────────────────────────
    On narrow screens the 200px md column + landscape thumb is cramped.
    Switch to full-width portrait (3:4) thumbnails stacked above the text,
