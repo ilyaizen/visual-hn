@@ -77,6 +77,8 @@
 }
 
 /* xs/md: ease-in-out from ~60% (scale 1.67) to 80% (scale 1.25) on hover */
+.vhn-thumb-wrap.vhn-xxs:hover .vhn-thumb-frame .vhn-thumb,
+.vhn-thumb-wrap.vhn-xxs.vhn-title-hovered .vhn-thumb-frame .vhn-thumb,
 .vhn-thumb-wrap.vhn-xs:hover .vhn-thumb-frame .vhn-thumb,
 .vhn-thumb-wrap.vhn-xs.vhn-title-hovered .vhn-thumb-frame .vhn-thumb,
 .vhn-thumb-wrap.vhn-md:hover .vhn-thumb-frame .vhn-thumb,
@@ -99,7 +101,31 @@
   color: var(--story-title-hover-color, #ff6600);
 }
 
-/* ----- extra-small mode: fixed right column, text on the left ----- */
+/* ----- Hckr left preview: keep score/comments top-aligned -----
+   Hckr aligns the outer .story on its baseline. With a left image, the first
+   flex child in .story-details is the thumbnail, whose baseline is its bottom,
+   so the score/comments link drops to the bottom of the image. Pin only that
+   direct metrics link to the row start; right-side and uninjected rows retain
+   upstream baseline alignment. */
+.story.vhn-hckr-left-preview > .story-metrics-link {
+  align-self: flex-start;
+}
+
+/* ----- extra-small mode: compact fixed column ----- */
+.vhn-thumb-wrap.vhn-xxs {
+  flex: none;
+  width: 80px;
+  max-width: 80px;
+  margin: 2px 0;
+}
+.vhn-thumb-wrap.vhn-xxs .vhn-thumb {
+  cursor: zoom-in;
+  transform: scale(2.5);
+  transform-origin: center;
+  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ----- small mode: fixed right column, text on the left ----- */
 .vhn-xs-host {
   display: flex;
   align-items: flex-start;
@@ -749,7 +775,8 @@
 
   /* Full-width thumbnails */
   .vhn-thumb-wrap.vhn-md,
-  .vhn-thumb-wrap.vhn-xs {
+  .vhn-thumb-wrap.vhn-xs,
+  .vhn-thumb-wrap.vhn-xxs {
     width: 100% !important;
     max-width: 100% !important;
     margin: 4px 0 10px !important;
@@ -757,7 +784,8 @@
 
   /* Keep the chosen aspect ratio; default remains landscape. */
   .vhn-thumb-wrap.vhn-md .vhn-thumb,
-  .vhn-thumb-wrap.vhn-xs .vhn-thumb {
+  .vhn-thumb-wrap.vhn-xs .vhn-thumb,
+  .vhn-thumb-wrap.vhn-xxs .vhn-thumb {
     transform: scale(1.03) !important;
     transition: none !important;
     cursor: zoom-in;
@@ -765,14 +793,16 @@
 
   /* Rank badge sizing for full-width thumbs */
   .vhn-thumb-wrap.vhn-md .vhn-rank-badge,
-  .vhn-thumb-wrap.vhn-xs .vhn-rank-badge {
+  .vhn-thumb-wrap.vhn-xs .vhn-rank-badge,
+  .vhn-thumb-wrap.vhn-xxs .vhn-rank-badge {
     font-size: 11px;
     padding: 1px 6px;
     top: 6px;
     left: 6px;
   }
   .vhn-thumb-wrap.vhn-md .vhn-rank-badge.vhn-rank-trophy,
-  .vhn-thumb-wrap.vhn-xs .vhn-rank-badge.vhn-rank-trophy {
+  .vhn-thumb-wrap.vhn-xs .vhn-rank-badge.vhn-rank-trophy,
+  .vhn-thumb-wrap.vhn-xxs .vhn-rank-badge.vhn-rank-trophy {
     font-size: 28px;
   }
 

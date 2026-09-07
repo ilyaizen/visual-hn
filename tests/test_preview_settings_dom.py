@@ -119,3 +119,76 @@ def test_image_position_reinjects_and_repositions_hover_preview():
         assert page.locator('[data-vhn-position="left"]').get_attribute("aria-checked") == "false"
 
         browser.close()
+
+
+def test_xs_size_and_left_hckr_metrics_alignment():
+    html = """
+    <main>
+      <div id="settings-panel"><div id="settings-content"></div></div>
+      <article id="story" class="story">
+        <a class="story-metrics-link">12 pts · 4 comments</a>
+        <div class="story-details">
+          <div class="story-title"><a href="https://example.com">Story</a></div>
+          <div class="story-meta">by test · now</div>
+        </div>
+      </article>
+    </main>
+    """
+    upstream_style = """
+      .story { display: flex; align-items: baseline; gap: 10px; }
+      .story-details { flex: 1; min-width: 0; }
+    """
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(html)
+        page.add_style_tag(content=upstream_style)
+        page.add_style_tag(content=OVERLAY_STYLE)
+        page.add_script_tag(
+            content="""
+            const story = document.querySelector('#story');
+            const title = story.querySelector('.story-title a');
+            window.VHN = {
+              findRows: () => [{ row: story, anchor: title, id: '1' }],
+              titleAnchor: () => title,
+              titleHost: () => story.querySelector('.story-details'),
+              fetchImages: async () => new Map([['1', {
+                image_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+                title: 'Story', position: 1
+              }]]),
+              apiOk: true,
+            };
+            """
+        )
+        page.add_script_tag(content=CONTENT_SCRIPT)
+        page.wait_for_timeout(350)
+
+        page.locator('#vhn-size-trigger').click()
+        assert page.locator('[data-vhn-size="xxs"]').count() == 1
+        page.locator('[data-vhn-size="xxs"]').click()
+        page.wait_for_timeout(200)
+
+        assert page.locator('#story .vhn-thumb-wrap').evaluate(
+            "(el) => el.classList.contains('vhn-xxs')"
+        )
+        assert page.locator('#story .vhn-thumb-wrap').evaluate(
+            "(el) => getComputedStyle(el).width"
+        ) == '80px'
+        assert page.locator('#story').evaluate(
+            "(el) => el.classList.contains('vhn-hckr-left-preview')"
+        )
+        assert page.locator('.story-metrics-link').evaluate(
+            "(el) => getComputedStyle(el).alignSelf"
+        ) == 'flex-start'
+
+        page.locator('[data-vhn-position="right"]').click()
+        page.wait_for_timeout(200)
+        assert not page.locator('#story').evaluate(
+            "(el) => el.classList.contains('vhn-hckr-left-preview')"
+        )
+        assert page.locator('.story-metrics-link').evaluate(
+            "(el) => getComputedStyle(el).alignSelf"
+        ) == 'auto'
+
+        browser.close()

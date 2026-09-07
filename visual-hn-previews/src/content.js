@@ -4,7 +4,8 @@
 
 (function () {
   const HANDLED_ATTR = 'data-vhn-thumb'; // marks an injected story container
-  // imageSize: 'xs' (small fixed column) | 'md' (medium fixed column) | 'large' (block above title)
+  // imageSize: 'xxs' (extra-small fixed column) | 'xs' (small fixed column) |
+  //            'md' (medium fixed column) | 'large' (block above title)
   const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
   const WEB_DEFAULTS = window.VHN_WEB_DEFAULTS || {};
   const hasChromeStorage =
@@ -256,6 +257,10 @@
     const title = window.VHN.titleAnchor(row, anchor);
     const host = window.VHN.titleHost(row, title);
     const large = settings.imageSize === 'large';
+    row.classList.toggle(
+      'vhn-hckr-left-preview',
+      !large && settings.imagePosition === 'left'
+    );
     const storyHref = title ? title.getAttribute('href') : null;
 
     const node = buildThumb(entry, { large, storyHref, title });
@@ -317,6 +322,7 @@
   // DOM. Used to make injection idempotent — safe to call on a fresh or
   // already-injected row.
   function _cleanRow(row) {
+    row.classList.remove('vhn-hckr-left-preview');
     row.querySelectorAll(
       '.vhn-thumb-wrap, .vhn-fav-badge, .vhn-desc, .vhn-rank-badge'
     ).forEach((n) => n.remove());
@@ -339,6 +345,10 @@
     const title = window.VHN.titleAnchor(row);
     const host = window.VHN.titleHost(row, title);
     const large = settings.imageSize === 'large';
+    row.classList.toggle(
+      'vhn-hckr-left-preview',
+      !large && settings.imagePosition === 'left'
+    );
 
     row.setAttribute(HANDLED_ATTR, '1');
 
@@ -373,6 +383,7 @@
   // column, restoring the site's original DOM so a re-scan injects cleanly in
   // whatever mode is now active.
   function removeInjections(row) {
+    row.classList.remove('vhn-hckr-left-preview');
     row.querySelectorAll('.vhn-thumb-wrap, .vhn-fav-badge, .vhn-desc, .vhn-rank-badge').forEach((n) => n.remove());
     row.querySelectorAll('.vhn-title-hot').forEach((n) => n.classList.remove('vhn-title-hot'));
     const host = row.querySelector('.vhn-xs-host');
@@ -755,6 +766,7 @@
       '<svg class="vhn-dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</button>' +
       '<div class="vhn-dropdown-menu" id="vhn-size-menu" role="listbox" aria-hidden="true">' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="xxs">XS</button>' +
       '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-size="xs">Small</button>' +
       '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="md">Medium</button>' +
       '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-size="large">Large</button>' +
