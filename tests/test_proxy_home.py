@@ -180,6 +180,14 @@ def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     assert ".vhn-thumb-wrap:hover .vhn-preview" not in css
 
 
+def test_overlay_leaves_header_and_settings_separators_to_hcker_news():
+    css = (hcker_proxy.EXTENSION_DIR / "styles" / "overlay.css").read_text()
+
+    # hcker.news owns the settings shell borders. A global header divider gets
+    # pushed below that shell when settings are open, creating a duplicate line.
+    assert "#header {\n  border-bottom:" not in css
+
+
 # ── Cache control ────────────────────────────────────────────────────────────
 
 
