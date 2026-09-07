@@ -121,6 +121,63 @@ def test_image_position_reinjects_and_repositions_hover_preview():
         browser.close()
 
 
+def test_hover_preview_flips_above_viewport_bottom_and_badge_follows_right_image():
+    html = """
+    <main>
+      <div id="settings-panel"><div id="settings-content"></div></div>
+      <div style="height: 640px"></div>
+      <article id="story"><a href="https://news.ycombinator.com/item?id=1">Story</a></article>
+    </main>
+    """
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 800})
+        page.set_content(html)
+        page.add_style_tag(content=OVERLAY_STYLE)
+        page.add_script_tag(
+            content="""
+            const story = document.querySelector('#story');
+            const anchor = story.querySelector('a');
+            window.VHN = {
+              findRows: () => [{ row: story, anchor, id: '1' }],
+              titleAnchor: () => anchor,
+              titleHost: () => story,
+              fetchImages: async () => new Map([['1', {
+                image_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+                title: 'Story', position: 4
+              }]]),
+              apiOk: true,
+            };
+            """
+        )
+        page.add_script_tag(content=CONTENT_SCRIPT)
+        page.wait_for_timeout(350)
+        page.locator('#vhn-show-hover-preview').check()
+        page.mouse.move(10, 10)
+        page.locator('.vhn-thumb-wrap').hover()
+        page.wait_for_timeout(200)
+
+        assert page.locator('.vhn-thumb-wrap').evaluate(
+            "(el) => el.classList.contains('vhn-preview-flip-y')"
+        )
+        preview_rect = page.locator('.vhn-preview').evaluate(
+            "(el) => ({ bottom: el.getBoundingClientRect().bottom, height: el.getBoundingClientRect().height, transform: getComputedStyle(el).transform })"
+        )
+        assert preview_rect['bottom'] <= 800, preview_rect
+
+        page.locator('[data-vhn-position="right"]').click()
+        page.wait_for_timeout(200)
+        assert page.locator('.vhn-rank-badge').evaluate(
+            "(badge) => badge.getBoundingClientRect().right <= badge.parentElement.getBoundingClientRect().right"
+        )
+        assert page.locator('.vhn-rank-badge').evaluate(
+            "(badge) => badge.getBoundingClientRect().left > badge.parentElement.getBoundingClientRect().left"
+        )
+
+        browser.close()
+
+
 def test_xs_size_and_left_hckr_metrics_alignment():
     html = """
     <main>
