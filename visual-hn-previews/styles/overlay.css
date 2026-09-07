@@ -122,7 +122,7 @@
   cursor: zoom-in;
   transform: scale(2.5);
   transform-origin: center;
-  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.375s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ----- small mode: fixed right column, text on the left ----- */
@@ -145,7 +145,7 @@
   cursor: zoom-in;
   transform: scale(2.5); /* zoomed-in: ~40% visible, centered; ease-in-out to 80% on hover */
   transform-origin: center;
-  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.375s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ----- medium mode: wider fixed left column, hover preview ----- */
@@ -159,7 +159,7 @@
   cursor: zoom-in;
   transform: scale(2.5); /* zoomed-in: ~40% visible, centered; ease-in-out to 80% on hover */
   transform-origin: center;
-  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.375s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ----- inline favicon (before the title) + description (new line) ----- */

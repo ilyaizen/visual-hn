@@ -178,6 +178,9 @@ def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     assert ".vhn-thumb-wrap.vhn-preview-open .vhn-preview {\n  visibility: visible;" in css
     assert ".vhn-hover-disabled .vhn-thumb-wrap.vhn-preview-open .vhn-preview {\n  visibility: hidden;" in css
     assert ".vhn-thumb-wrap:hover .vhn-preview" not in css
+    assert css.count(
+        "transition: transform 0.375s cubic-bezier(0.2, 0.8, 0.2, 1);"
+    ) == 3
 
 
 def test_overlay_leaves_header_and_settings_separators_to_hcker_news():
