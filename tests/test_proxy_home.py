@@ -152,7 +152,7 @@ def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     css = (hcker_proxy.EXTENSION_DIR / "styles" / "overlay.css").read_text()
 
     assert (
-        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };"
+        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true, stickyHeader: true };"
         in script
     )
     assert 'data-vhn-size="xs">Small</button>' in script

@@ -6,7 +6,7 @@
   const HANDLED_ATTR = 'data-vhn-thumb'; // marks an injected story container
   // imageSize: 'xxs' (extra-small fixed column) | 'xs' (small fixed column) |
   //            'md' (medium fixed column) | 'large' (block above title)
-  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true };
+  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true, stickyHeader: true };
   const WEB_DEFAULTS = window.VHN_WEB_DEFAULTS || {};
   const hasChromeStorage =
     typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
@@ -464,6 +464,18 @@
     renderVhnSettings();
   }
 
+  function applyStickyHeaderState() {
+    document.documentElement.classList.toggle('vhn-header-static', !settings.stickyHeader);
+  }
+
+  async function setStickyHeader(value) {
+    if (settings.stickyHeader === value) return;
+    settings.stickyHeader = value;
+    await saveSetting('stickyHeader', value);
+    applyStickyHeaderState();
+    renderVhnSettings();
+  }
+
   function applyHoverPreviewState() {
     document.documentElement.classList.toggle('vhn-hover-disabled', !settings.showHoverPreview);
   }
@@ -831,6 +843,10 @@
       '<label class="settings-label" for="vhn-show-rank-badges">Rank badges</label>' +
       '<div class="settings-options"><label class="toggle-switch"><input type="checkbox" id="vhn-show-rank-badges"><span class="toggle-slider"></span></label></div>' +
       '</div>' +
+      '<div class="settings-row">' +
+      '<label class="settings-label" for="vhn-sticky-header">Sticky header</label>' +
+      '<div class="settings-options"><label class="toggle-switch"><input type="checkbox" id="vhn-sticky-header"><span class="toggle-slider"></span></label></div>' +
+      '</div>' +
       '</div>';
 
     // Image Size dropdown
@@ -892,6 +908,9 @@
     section
       .querySelector('#vhn-show-rank-badges')
       .addEventListener('change', (ev) => setShowRankBadges(ev.target.checked));
+    section
+      .querySelector('#vhn-sticky-header')
+      .addEventListener('change', (ev) => setStickyHeader(ev.target.checked));
 
     return section;
   }
@@ -964,6 +983,9 @@
 
     const showRankBadges = vhnPanelEl.querySelector('#vhn-show-rank-badges');
     if (showRankBadges && showRankBadges.checked !== settings.showRankBadges) showRankBadges.checked = settings.showRankBadges;
+
+    const stickyHeader = vhnPanelEl.querySelector('#vhn-sticky-header');
+    if (stickyHeader && stickyHeader.checked !== settings.stickyHeader) stickyHeader.checked = settings.stickyHeader;
   }
 
   function scheduleSettingsRender() {
@@ -1056,6 +1078,7 @@
     await loadSettings();
     applyEnabledState();
     applyHoverPreviewState();
+    applyStickyHeaderState();
     scheduleSettingsRender();
     if (settings.enabled) scan();
 
@@ -1091,6 +1114,7 @@
           applyEnabledState();
           if (changes.imageSize || changes.aspectRatio || changes.imagePosition || changes.showFavicons || changes.showDescriptions) reapplyInjections();
           if (changes.showHoverPreview) applyHoverPreviewState();
+          if (changes.stickyHeader) applyStickyHeaderState();
         });
       });
     }

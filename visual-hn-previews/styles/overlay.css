@@ -840,3 +840,16 @@
     font-size: 14px;
   }
 }
+
+/* ── "Sticky header" option ──────────────────────────────────────────────
+   ON (default): hcker.news's own `#header { position: sticky; top: 0 }`
+   applies untouched. OFF: class on <html> (set by content.js) unpins the
+   header so it scrolls away with the page like normal content. The class
+   also releases the sticky settings drawer, which is positioned relative
+   to the pinned header's sticky range. */
+html.vhn-header-static #header {
+  position: static !important;
+}
+html.vhn-header-static #settings-sticky-trigger {
+  display: none !important;
+}
