@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -16,13 +17,18 @@ OVERLAY_STYLE = (
     / "overlay.css"
 ).read_text()
 
-UPSTREAM_STYLE = "#header { position: sticky; top: 0; height: 40px; background: #eee; }"
+UPSTREAM_STYLE = """
+#header { position: sticky; top: 0; height: 40px; background: #eee; }
+.settings-panel { position: sticky; top: 45px; height: 30px; background: #ddd; }
+.feed-header { position: sticky; top: 75px; height: 24px; background: #ccc; }
+"""
 
 TEST_PAGE = """
 <header id="header"></header>
 <main>
-  <div id="settings-panel"><div id="settings-content"></div></div>
+  <div class="settings-panel"><div id="settings-content"></div></div>
   <div id="settings-sticky-trigger"></div>
+  <div class="feed-header"></div>
   <article id="story"><a href="https://news.ycombinator.com/item?id=1">Story</a></article>
 </main>
 """
@@ -68,26 +74,29 @@ def test_sticky_header_toggle_unpins_and_restores():
             == "sticky"
         )
 
-        # Toggle OFF: header unpins and scrolls away with the page.
+        # Toggle OFF: the whole sticky stack (header, settings bar, feed
+        # headers) unpins and scrolls away with the page.
         page.locator("#vhn-sticky-header").uncheck()
         page.wait_for_timeout(150)
-        assert (
-            page.evaluate(
-                "getComputedStyle(document.querySelector('#header')).position"
-            )
-            == "static"
-        )
+        for selector in ("#header", ".settings-panel", ".feed-header"):
+            assert (
+                page.evaluate(
+                    "getComputedStyle(document.querySelector(%s)).position" % json.dumps(selector)
+                )
+                == "static"
+            ), selector
         assert page.evaluate("document.documentElement.classList.contains('vhn-header-static')")
 
-        # Toggle back ON: pinned again, override class removed.
+        # Toggle back ON: everything pinned again, override class removed.
         page.locator("#vhn-sticky-header").check()
         page.wait_for_timeout(150)
-        assert (
-            page.evaluate(
-                "getComputedStyle(document.querySelector('#header')).position"
-            )
-            == "sticky"
-        )
+        for selector in ("#header", ".settings-panel", ".feed-header"):
+            assert (
+                page.evaluate(
+                    "getComputedStyle(document.querySelector(%s)).position" % json.dumps(selector)
+                )
+                == "sticky"
+            ), selector
         assert not page.evaluate("document.documentElement.classList.contains('vhn-header-static')")
 
         browser.close()

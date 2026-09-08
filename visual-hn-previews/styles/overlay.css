@@ -842,12 +842,17 @@
 }
 
 /* ── "Sticky header" option ──────────────────────────────────────────────
-   ON (default): hcker.news's own `#header { position: sticky; top: 0 }`
-   applies untouched. OFF: class on <html> (set by content.js) unpins the
-   header so it scrolls away with the page like normal content. The class
-   also releases the sticky settings drawer, which is positioned relative
-   to the pinned header's sticky range. */
-html.vhn-header-static #header {
+   ON (default): hcker.news's own sticky stack applies untouched.
+   OFF: class on <html> (set by content.js) unpins the whole stack so
+   everything scrolls away with the page: the site header, the settings
+   bar under it (.settings-panel, sticky at --site-header-sticky-offset),
+   and the feed section headers (.feed-header / .timeline-pinned-header-
+   host, sticky at that offset + settings height). #settings-sticky-
+   trigger (the drawer's sticky-range marker) is hidden with them. */
+html.vhn-header-static #header,
+html.vhn-header-static .settings-panel,
+html.vhn-header-static .feed-header,
+html.vhn-header-static .timeline-pinned-header-host {
   position: static !important;
 }
 html.vhn-header-static #settings-sticky-trigger {
