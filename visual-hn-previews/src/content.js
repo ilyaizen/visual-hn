@@ -6,10 +6,23 @@
   const HANDLED_ATTR = 'data-vhn-thumb'; // marks an injected story container
   // imageSize: 'xxs' (extra-small fixed column) | 'xs' (small fixed column) |
   //            'md' (medium fixed column) | 'large' (block above title)
-  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true, stickyHeader: true };
+  const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: '4:3', orientation: 'landscape', imagePosition: 'right', showFavicons: true, showDescriptions: true, showHoverPreview: true, showRankBadges: true, stickyHeader: true };
   const WEB_DEFAULTS = window.VHN_WEB_DEFAULTS || {};
   const hasChromeStorage =
     typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
+
+  // 2026-09 (v58): the old single `aspectRatio` dropdown (square | portrait |
+  // landscape) split into two settings — `orientation` (square | portrait |
+  // landscape) and `aspectRatio` (square | 4:3 | 16:9). Stored values from
+  // the old dropdown carry orientation words; map them onto the new pair.
+  function migrateAspectRatioSettings(s) {
+    if (
+      s.aspectRatio === 'square' || s.aspectRatio === 'portrait' || s.aspectRatio === 'landscape'
+    ) {
+      s.orientation = s.aspectRatio;
+      s.aspectRatio = '4:3';
+    }
+  }
 
   let settings = { ...DEFAULT_SETTINGS, ...WEB_DEFAULTS };
   let scanScheduled = false;
@@ -25,12 +38,14 @@
       if (hasChromeStorage) {
         const stored = await chrome.storage.sync.get({ ...DEFAULT_SETTINGS, ...WEB_DEFAULTS });
         settings = { ...DEFAULT_SETTINGS, ...WEB_DEFAULTS, ...stored };
+        migrateAspectRatioSettings(settings);
         if (WEB_DEFAULTS.apiBase) settings.apiBase = WEB_DEFAULTS.apiBase;
         return;
       }
       const raw = window.localStorage && window.localStorage.getItem('vhn-preview-settings');
       const stored = raw ? JSON.parse(raw) : {};
       settings = { ...DEFAULT_SETTINGS, ...WEB_DEFAULTS, ...stored };
+      migrateAspectRatioSettings(settings);
       if (WEB_DEFAULTS.apiBase) settings.apiBase = WEB_DEFAULTS.apiBase;
     } catch (e) {
       settings = { ...DEFAULT_SETTINGS, ...WEB_DEFAULTS };
@@ -63,13 +78,27 @@
   //           highlights the title (shared hover group); NO zoom modal/preview.
   //  xs    -> small fixed column thumb; hover preview card; click opens the
   //           zoom lightbox.
+  function orientationClass() {
+    if (settings.orientation === 'square') return 'vhn-or-square';
+    return settings.orientation === 'portrait' ? 'vhn-or-portrait' : 'vhn-or-landscape';
+  }
+
+  function aspectRatioClass() {
+    if (settings.aspectRatio === 'square') return 'vhn-ar-square';
+    return settings.aspectRatio === '4:3' ? 'vhn-ar-4x3' : 'vhn-ar-16x9';
+  }
+
   function buildThumb(entry, opts) {
     const large = opts.large;
     const wrap = document.createElement(large ? 'a' : 'span');
-    wrap.className = 'vhn-thumb-wrap ' + (large ? 'vhn-large' : 'vhn-' + settings.imageSize) + ' vhn-ar-' + settings.aspectRatio + ' vhn-pos-' + settings.imagePosition;
+    wrap.className =
+      'vhn-thumb-wrap ' +
+      (large ? 'vhn-large' : 'vhn-' + settings.imageSize) +
+      ' ' + aspectRatioClass() + ' ' + orientationClass() +
+      ' vhn-pos-' + settings.imagePosition;
     if (large && opts.storyHref) wrap.href = opts.storyHref;
 
-    // Clipped frame so the 10% zoom (scale 1.1) is cropped to the 16:9 box
+    // Clipped frame so the 10% zoom (scale 1.1) is cropped to the thumb box
     // without overflowing — and without clipping the absolute hover preview,
     // which lives on the wrap, not the frame.
     const frame = document.createElement('span');
@@ -256,7 +285,10 @@
   function buildSpacer() {
     const wrap = document.createElement('span');
     const sizeClass = settings.imageSize === 'large' ? 'vhn-large' : 'vhn-' + settings.imageSize;
-    wrap.className = 'vhn-thumb-wrap vhn-spacer ' + sizeClass + ' vhn-ar-' + settings.aspectRatio + ' vhn-pos-' + settings.imagePosition;
+    wrap.className =
+      'vhn-thumb-wrap vhn-spacer ' + sizeClass +
+      ' ' + aspectRatioClass() + ' ' + orientationClass() +
+      ' vhn-pos-' + settings.imagePosition;
     const frame = document.createElement('span');
     frame.className = 'vhn-thumb-frame';
     const spacer = document.createElement('span');
@@ -484,6 +516,14 @@
     if (settings.aspectRatio === value) return;
     settings.aspectRatio = value;
     await saveSetting('aspectRatio', value);
+    reapplyInjections();
+    renderVhnSettings();
+  }
+
+  async function setOrientation(value) {
+    if (settings.orientation === value) return;
+    settings.orientation = value;
+    await saveSetting('orientation', value);
     reapplyInjections();
     renderVhnSettings();
   }
@@ -809,13 +849,29 @@
       '<div class="settings-options">' +
       '<div class="vhn-custom-dropdown" id="vhn-ar-dropdown">' +
       '<button type="button" class="vhn-dropdown-trigger" id="vhn-ar-trigger" aria-haspopup="listbox" aria-expanded="false">' +
-      '<span class="vhn-dropdown-selected-text">Landscape</span>' +
+      '<span class="vhn-dropdown-selected-text">16:9</span>' +
       '<svg class="vhn-dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</button>' +
       '<div class="vhn-dropdown-menu" id="vhn-ar-menu" role="listbox" aria-hidden="true">' +
       '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-ar="square">Square</button>' +
-      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-ar="portrait">Portrait</button>' +
-      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-ar="landscape">Landscape</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-ar="4:3">4:3</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-ar="16:9">16:9</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      '<div class="settings-row">' +
+      '<span class="settings-label">Orientation</span>' +
+      '<div class="settings-options">' +
+      '<div class="vhn-custom-dropdown" id="vhn-or-dropdown">' +
+      '<button type="button" class="vhn-dropdown-trigger" id="vhn-or-trigger" aria-haspopup="listbox" aria-expanded="false">' +
+      '<span class="vhn-dropdown-selected-text">Landscape</span>' +
+      '<svg class="vhn-dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</button>' +
+      '<div class="vhn-dropdown-menu" id="vhn-or-menu" role="listbox" aria-hidden="true">' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-or="square">Square</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="false" data-vhn-or="portrait">Portrait</button>' +
+      '<button type="button" class="vhn-dropdown-option" role="option" aria-selected="true" data-vhn-or="landscape">Landscape</button>' +
       '</div>' +
       '</div>' +
       '</div>' +
@@ -889,6 +945,26 @@
       });
     });
 
+    // Orientation dropdown
+    const orTrigger = section.querySelector('#vhn-or-trigger');
+    const orMenu = section.querySelector('#vhn-or-menu');
+    orTrigger.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const expanded = orTrigger.getAttribute('aria-expanded') === 'true';
+      closeAllDropdowns(section);
+      if (!expanded) {
+        orTrigger.setAttribute('aria-expanded', 'true');
+        orMenu.setAttribute('aria-hidden', 'false');
+      }
+    });
+    orMenu.querySelectorAll('.vhn-dropdown-option').forEach((opt) => {
+      opt.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setOrientation(opt.getAttribute('data-vhn-or'));
+        closeAllDropdowns(section);
+      });
+    });
+
     section.querySelectorAll('.vhn-position-option').forEach((opt) => {
       opt.addEventListener('click', () => setImagePosition(opt.getAttribute('data-vhn-position')));
     });
@@ -927,9 +1003,9 @@
     const menu = document.querySelector(menuSel);
     if (!trigger || !menu) return;
     trigger.querySelector('.vhn-dropdown-selected-text').textContent =
-      menu.querySelector('[data-vhn-size="' + value + '"], [data-vhn-ar="' + value + '"]')?.textContent || value;
+      menu.querySelector('[data-vhn-size="' + value + '"], [data-vhn-ar="' + value + '"], [data-vhn-or="' + value + '"]')?.textContent || value;
     menu.querySelectorAll('.vhn-dropdown-option').forEach((opt) => {
-      const optVal = opt.getAttribute('data-vhn-size') || opt.getAttribute('data-vhn-ar');
+      const optVal = opt.getAttribute('data-vhn-size') || opt.getAttribute('data-vhn-ar') || opt.getAttribute('data-vhn-or');
       const active = optVal === value;
       opt.classList.toggle('active', active);
       opt.setAttribute('aria-selected', String(active));
@@ -970,6 +1046,7 @@
 
     updateDropdownText('#vhn-size-trigger', '#vhn-size-menu', settings.imageSize);
     updateDropdownText('#vhn-ar-trigger', '#vhn-ar-menu', settings.aspectRatio);
+    updateDropdownText('#vhn-or-trigger', '#vhn-or-menu', settings.orientation);
     updateImagePositionToggle(vhnPanelEl);
 
     const showFavicons = vhnPanelEl.querySelector('#vhn-show-favicons');
@@ -1112,7 +1189,7 @@
         if (area !== 'sync') return;
         loadSettings().then(() => {
           applyEnabledState();
-          if (changes.imageSize || changes.aspectRatio || changes.imagePosition || changes.showFavicons || changes.showDescriptions) reapplyInjections();
+          if (changes.imageSize || changes.aspectRatio || changes.orientation || changes.imagePosition || changes.showFavicons || changes.showDescriptions) reapplyInjections();
           if (changes.showHoverPreview) applyHoverPreviewState();
           if (changes.stickyHeader) applyStickyHeaderState();
         });

@@ -94,19 +94,6 @@ def test_image_position_reinjects_and_repositions_hover_preview():
         page.wait_for_timeout(350)
 
         assert page.locator("#story > .vhn-thumb-wrap").evaluate(
-            "(el) => el === el.parentElement.firstElementChild"
-        )
-        assert page.locator("#story > .vhn-thumb-wrap").evaluate(
-            "(el) => el.classList.contains('vhn-pos-left')"
-        )
-        assert page.locator(".vhn-preview").evaluate(
-            "(el) => el.getBoundingClientRect().left > el.parentElement.getBoundingClientRect().right"
-        )
-
-        page.locator('[data-vhn-position="right"]').click()
-        page.wait_for_timeout(200)
-
-        assert page.locator("#story > .vhn-thumb-wrap").evaluate(
             "(el) => el === el.parentElement.lastElementChild"
         )
         assert page.locator("#story > .vhn-thumb-wrap").evaluate(
@@ -115,8 +102,21 @@ def test_image_position_reinjects_and_repositions_hover_preview():
         assert page.locator(".vhn-preview").evaluate(
             "(el) => el.getBoundingClientRect().right < el.parentElement.getBoundingClientRect().left"
         )
-        assert page.locator('[data-vhn-position="right"]').get_attribute("aria-checked") == "true"
-        assert page.locator('[data-vhn-position="left"]').get_attribute("aria-checked") == "false"
+
+        page.locator('[data-vhn-position="left"]').click()
+        page.wait_for_timeout(200)
+
+        assert page.locator("#story > .vhn-thumb-wrap").evaluate(
+            "(el) => el === el.parentElement.firstElementChild"
+        )
+        assert page.locator("#story > .vhn-thumb-wrap").evaluate(
+            "(el) => el.classList.contains('vhn-pos-left')"
+        )
+        assert page.locator(".vhn-preview").evaluate(
+            "(el) => el.getBoundingClientRect().left > el.parentElement.getBoundingClientRect().right"
+        )
+        assert page.locator('[data-vhn-position="left"]').get_attribute("aria-checked") == "true"
+        assert page.locator('[data-vhn-position="right"]').get_attribute("aria-checked") == "false"
 
         browser.close()
 
@@ -232,6 +232,8 @@ def test_xs_size_and_left_hckr_metrics_alignment():
         assert page.locator('#story .vhn-thumb-wrap').evaluate(
             "(el) => getComputedStyle(el).width"
         ) == '80px'
+        page.locator('[data-vhn-position="left"]').click()
+        page.wait_for_timeout(200)
         assert page.locator('#story').evaluate(
             "(el) => el.classList.contains('vhn-hckr-left-preview')"
         )

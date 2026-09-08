@@ -11,7 +11,7 @@
 
 /* ----- thumbnail ----- */
 .vhn-thumb-wrap {
-  --vhn-thumb-aspect: 16 / 9;
+  --vhn-thumb-aspect: 4 / 3;
   position: relative;
   display: block;
   width: 100%;
@@ -42,7 +42,14 @@
   box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 .vhn-thumb-wrap.vhn-ar-square { --vhn-thumb-aspect: 1 / 1; }
-.vhn-thumb-wrap.vhn-ar-portrait { --vhn-thumb-aspect: 3 / 4; }
+.vhn-thumb-wrap.vhn-ar-4x3 { --vhn-thumb-aspect: 4 / 3; }
+.vhn-thumb-wrap.vhn-ar-16x9 { --vhn-thumb-aspect: 16 / 9; }
+/* Orientation transposes the chosen ratio: portrait swaps w/h, square forces
+   1:1 regardless of ratio. Landscape keeps the ratio as-is (above). */
+.vhn-thumb-wrap.vhn-or-square { --vhn-thumb-aspect: 1 / 1; }
+.vhn-thumb-wrap.vhn-or-portrait.vhn-ar-square { --vhn-thumb-aspect: 1 / 1; }
+.vhn-thumb-wrap.vhn-or-portrait.vhn-ar-4x3 { --vhn-thumb-aspect: 3 / 4; }
+.vhn-thumb-wrap.vhn-or-portrait.vhn-ar-16x9 { --vhn-thumb-aspect: 9 / 16; }
 
 /* Stacking root-cause fix: every .vhn-thumb-wrap is a `position:relative`
    stacking context at z-index:1, so the preview's z-index only ranks it

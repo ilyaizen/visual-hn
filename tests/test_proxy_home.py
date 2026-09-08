@@ -152,7 +152,7 @@ def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     css = (hcker_proxy.EXTENSION_DIR / "styles" / "overlay.css").read_text()
 
     assert (
-        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: 'landscape', imagePosition: 'left', showFavicons: true, showDescriptions: true, showHoverPreview: false, showRankBadges: true, stickyHeader: true };"
+        "const DEFAULT_SETTINGS = { enabled: true, apiBase: '', imageSize: 'xs', aspectRatio: '4:3', orientation: 'landscape', imagePosition: 'right', showFavicons: true, showDescriptions: true, showHoverPreview: true, showRankBadges: true, stickyHeader: true };"
         in script
     )
     assert 'data-vhn-size="xs">Small</button>' in script
@@ -164,7 +164,7 @@ def test_content_script_defaults_to_small_images_and_uses_theme_safe_settings():
     assert 'data-vhn-position="right" aria-checked="false">Right</button>' in script
     assert "settings.imagePosition === 'right'" in script
     assert "host.appendChild(node);\n        host.appendChild(text);" in script
-    assert "--vhn-thumb-aspect: 16 / 9;" in css
+    assert "--vhn-thumb-aspect: 4 / 3;" in css
     assert "aspect-ratio: var(--vhn-thumb-aspect);" in css
     assert ".vhn-thumb-wrap.vhn-pos-right .vhn-preview" in css
     assert 'id="vhn-show-favicons"' in script
