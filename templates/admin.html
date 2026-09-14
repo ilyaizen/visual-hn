@@ -4,7 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>visual.hcker.news — admin</title>
+    <title>visual-hn admin</title>
+    <link rel="icon" href="/static/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-32x32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-16x16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <style>
       :root { color-scheme: dark; }
       * { box-sizing: border-box; }
@@ -412,7 +416,7 @@
   <body>
     <div class="wrap">
       {% if not authed %}
-      <h1>visual.hcker.news — admin</h1>
+      <h1>visual-hn admin</h1>
       <div class="card">
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
         <form method="POST" action="/admin/login">
@@ -428,7 +432,7 @@
       </div>
       {% else %}
       <div class="top-bar">
-        <h1>visual.hcker.news — admin</h1>
+        <h1>visual-hn admin</h1>
         <div class="actions">
           <button class="secondary" onclick="pollStats()">refresh</button>
           <form method="POST" action="/admin/logout" style="display:inline">
@@ -667,6 +671,12 @@
         return d.innerHTML.replace(/"/g, "&quot;");
       }
 
+      // For attribute values: esc() plus single quotes, so apostrophes in
+      // story titles can't break out of data-* attributes or inline JS strings.
+      function escAttr(s) {
+        return esc(s).replace(/'/g, "&#39;");
+      }
+
       // Render unix timestamps on load
       (function () {
         const el = document.getElementById("node-last-activity");
@@ -893,9 +903,10 @@
             var og = s.has_og ? '<span class="ss-badge">og</span>' : '';
             var pos = s.position ? '#' + s.position : '—';
             return '<div class="ss-cell">' +
-              '<div class="ss-thumb' + (suspect ? ' suspect' : '') + '" ' +
-              'onclick="openLightbox(\'' + esc(s.image) + '\', \'' + esc(s.title) + '\', \'' + esc(s.url) + '\', \'' + esc(s.domain) + '\')">' +
-              '<img src="' + esc(s.image) + '" loading="lazy" alt="" ' +
+              '<div class="ss-thumb' + (suspect ? ' suspect' : '') + '" data-image="' + escAttr(s.image) + '" ' +
+              'data-title="' + escAttr(s.title) + '" data-url="' + escAttr(s.url) + '" ' +
+              'data-domain="' + escAttr(s.domain) + '">' +
+              '<img src="' + escAttr(s.image) + '" loading="lazy" alt="" ' +
               'onerror="this.parentElement.classList.add(\'broken\')" />' +
               '</div>' +
               '<p class="ss-title">' + esc(s.title) + '</p>' +
@@ -911,6 +922,21 @@
           console.error("screenshot poll failed", e);
         }
       }
+
+      // One delegated listener for all thumbnails (current and re-rendered):
+      // reads story data from data-* attributes instead of inline onclick JS.
+      document
+        .getElementById("screenshot-grid")
+        .addEventListener("click", function (ev) {
+          var thumb = ev.target.closest(".ss-thumb");
+          if (!thumb) return;
+          openLightbox(
+            thumb.getAttribute("data-image"),
+            thumb.getAttribute("data-title"),
+            thumb.getAttribute("data-url"),
+            thumb.getAttribute("data-domain")
+          );
+        });
 
       /* ═══ Lightbox (ported from extension content.js) ═══ */
       var modalEl = null, modalImg = null, modalStage = null;
