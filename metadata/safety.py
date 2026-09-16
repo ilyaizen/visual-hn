@@ -45,8 +45,14 @@ def aiohttp_request_url(url: str) -> URL:
     return URL(url, encoded=True)
 
 
-def is_public_http_url(url: str | None) -> bool:
-    """Return True for public http(s) URLs and False for localhost/private targets."""
+def is_public_http_url(url: str | None, strict: bool = False) -> bool:
+    """Return True for public http(s) URLs and False for localhost/private targets.
+
+    With strict=True, a hostname that cannot be resolved (gaierror) is also
+    rejected instead of being given the benefit of the doubt — used for
+    redirect hops where an attacker-controlled name must resolve to a
+    provably public address before it is ever requested.
+    """
     if not url:
         return False
     parsed = urlparse(url)
@@ -67,7 +73,7 @@ def is_public_http_url(url: str | None) -> bool:
         try:
             infos = socket.getaddrinfo(host, None)
         except socket.gaierror:
-            return True
+            return not strict
         for info in infos:
             sockaddr = info[4]
             address = sockaddr[0]

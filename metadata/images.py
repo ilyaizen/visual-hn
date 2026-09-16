@@ -2,7 +2,9 @@
 
 Imports from safety: is_public_http_url, resolve_metadata_url, source_domain.
 Imports from parser: clean_html_text.
-Imports from fetcher: CFFI_TIMEOUT, USER_AGENT, MAX_IMAGE_BYTES, read_response_capped.
+PDF fetching: every redirect hop is re-validated against is_public_http_url
+(allow_redirects=False + manual loop), the body is streamed with a hard byte
+cap, and pdftoppm runs under an asyncio timeout with kill on expiry.
 """
 
 from __future__ import annotations
@@ -11,9 +13,13 @@ import asyncio
 import hashlib
 import logging
 import os
+from contextlib import suppress
 from io import BytesIO
 from ssl import SSLError
 from typing import Any
+from urllib.parse import urljoin
+
+from asyncio import create_subprocess_exec
 
 from curl_cffi.requests import AsyncSession as CurlCffiSession
 from PIL import Image, ImageFile
@@ -36,10 +42,104 @@ MIN_IMAGE_WIDTH = 400
 MIN_IMAGE_HEIGHT = 100
 
 
+async def _download_pdf_capped(cffi_session, url: str, max_bytes: int) -> bytes | None:
+    """Download a PDF body, validating every redirect hop and streaming with a hard byte cap.
+
+    Returns the PDF bytes, or None on any policy violation (unsafe redirect hop,
+    non-PDF content, oversized body, network error). No automatic redirect
+    following: each hop is checked with is_public_http_url before being followed.
+    """
+    current_url = url
+    response = None
+    for _ in range(6):
+        if not is_public_http_url(current_url, strict=True):
+            logger.warning(
+                "PDF fetch redirect chain hit unsafe URL %s (origin %s)",
+                current_url,
+                url,
+            )
+            return None
+        response = await cffi_session.get(
+            current_url, allow_redirects=False, stream=True
+        )
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("location")
+            await response.aclose()
+            if not location:
+                break
+            current_url = urljoin(current_url, location)
+            continue
+        try:
+            response.raise_for_status()
+            content_type = (response.headers.get("content-type") or "").lower()
+            if "pdf" not in content_type and not url.lower().endswith(".pdf"):
+                logger.warning(
+                    "PDF URL returned non-PDF content-type: %s", content_type
+                )
+                return None
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_content(64 * 1024):
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > max_bytes:
+                    logger.warning(
+                        "PDF too large for preview render: >%d bytes", max_bytes
+                    )
+                    return None
+            pdf_data = b"".join(chunks)
+        finally:
+            await response.aclose()
+        if not pdf_data or len(pdf_data) < 1000:
+            return None
+        return pdf_data
+    return None
+
+
+PDF_POPPLER_TIMEOUT_SECONDS = float(os.environ.get("VHN_PDF_POPPLER_TIMEOUT", "20"))
+
+
+async def _run_pdftoppm(tmp_path: str, output_base: str) -> tuple[int, bytes]:
+    """Run pdftoppm with a hard timeout; kill the process tree on expiry.
+
+    Returns (returncode, stderr_bytes). Raises TimeoutError if killed.
+    """
+    proc = await create_subprocess_exec(
+        "pdftoppm",
+        "-jpeg",
+        "-r",
+        "150",
+        "-f",
+        "1",
+        "-l",
+        "1",
+        "-singlefile",
+        tmp_path,
+        output_base,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=PDF_POPPLER_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        with suppress(ProcessLookupError):
+            proc.kill()
+        with suppress(Exception):
+            await proc.wait()
+        raise TimeoutError(
+            f"pdftoppm exceeded {PDF_POPPLER_TIMEOUT_SECONDS}s and was killed"
+        ) from None
+    return proc.returncode, stderr
+
+
 async def _render_pdf_first_page(url: str) -> str | None:
     """Download a PDF and render its first page as a JPEG preview.
 
     Uses curl_cffi for download (Chrome TLS) and pdftoppm (Poppler) for rendering.
+    Download is throttled: manual redirect validation + streamed byte cap; the
+    renderer runs under a hard timeout and is killed if hung.
     """
     import metadata
 
@@ -52,22 +152,11 @@ async def _render_pdf_first_page(url: str) -> str | None:
             timeout=metadata.CFFI_TIMEOUT,
             verify=True,
         ) as cffi_session:
-            response = await cffi_session.get(url, allow_redirects=True)
-            response.raise_for_status()
-            content_type = (response.headers.get("content-type") or "").lower()
-            if "pdf" not in content_type and not url.lower().endswith(".pdf"):
-                logger.warning(
-                    "PDF URL returned non-PDF content-type: %s", content_type
-                )
-                return None
-            pdf_data = response.content
-            if not pdf_data or len(pdf_data) < 1000:
-                return None
-            if len(pdf_data) > metadata.MAX_IMAGE_BYTES * 2:
-                logger.warning(
-                    "PDF too large for preview render: %d bytes", len(pdf_data)
-                )
-                return None
+            pdf_data = await _download_pdf_capped(
+                cffi_session, url, metadata.MAX_IMAGE_BYTES * 2
+            )
+        if pdf_data is None:
+            return None
     except Exception as exc:
         logger.warning(
             "PDF download failed for %s: %s - %s", url, type(exc).__name__, exc
@@ -87,23 +176,10 @@ async def _render_pdf_first_page(url: str) -> str | None:
             tmp_path = tmp.name
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "pdftoppm",
-                "-jpeg",
-                "-r",
-                "150",
-                "-f",
-                "1",
-                "-l",
-                "1",
-                "-singlefile",
-                tmp_path,
-                pdf_path.replace(".jpg", ""),
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.PIPE,
+            returncode, stderr = await _run_pdftoppm(
+                tmp_path, pdf_path.replace(".jpg", "")
             )
-            _, stderr = await proc.communicate()
-            if proc.returncode != 0:
+            if returncode != 0:
                 logger.warning("pdftoppm failed for %s: %s", url, stderr.decode()[:200])
                 return None
             # pdftoppm with -singlefile outputs directly to the specified path
