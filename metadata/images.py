@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from contextlib import suppress
 from io import BytesIO
 from ssl import SSLError
@@ -223,13 +224,36 @@ async def _render_pdf_first_page(url: str) -> str | None:
         return None
 
 
-async def generate_favicon_composite(url: str) -> str | None:
+# The favicon exception documented above gets a bounded budget of its own;
+# independent of CFFI_TIMEOUT so the two-favicon worst case is capped here.
+FAVICON_BUDGET_SECONDS = float(os.environ.get("VHN_FAVICON_BUDGET", "10"))
+
+
+async def generate_favicon_composite(
+    url: str, deadline: float | None = None
+) -> str | None:
     """Generate a branded card with the site's favicon + domain name.
 
     Replaces the blank placeholder when all other image paths fail.
     Returns a local image filename, or None on failure.
+
+    Documented deadline exception (VH-02): this stage is the last line of
+    defense before a story degrades to a bare placeholder, so it may run
+    after the overall metadata deadline is exhausted. The exception is
+    *bounded*: it gets at most FAVICON_BUDGET_SECONDS (VHN_FAVICON_BUDGET,
+    default 10s) of wall time (worst case two icon fetches, each clamped to
+    the remaining favicon budget), so the old failure mode of spending
+    2 x CFFI_TIMEOUT (50s) past the deadline cannot recur. The budget is
+    accounted with a measured elapsed clock, not a per-attempt guess, so a
+    fast failure (connection refused) does not over-deduct.
     """
     import metadata
+
+    # The documented exception (VH-02): even when the overall deadline has
+    # expired, the favicon composite gets a fresh FAVICON_BUDGET_SECONDS of
+    # its own. That bounded exception *is* sanctioned; regardless of where
+    # the deadline stands, the extra wall time never exceeds this budget.
+    favicon_budget = FAVICON_BUDGET_SECONDS
 
     domain = source_domain(url)
     if not domain:
@@ -242,13 +266,27 @@ async def generate_favicon_composite(url: str) -> str | None:
         f"https://www.google.com/s2/favicons?domain={domain}&sz=128",
         f"https://icons.duckduckgo.com/ip3/{domain}.ico",
     ):
+        if favicon_budget <= 0:
+            logger.info(
+                "Favicon budget exhausted before fetch for %s", domain
+            )
+            break
+        attempt_started = time.monotonic()
+        attempt_timeout = max(min(metadata.CFFI_TIMEOUT, favicon_budget), 0.1)
         try:
             async with CurlCffiSession(
                 impersonate="chrome",
-                timeout=metadata.CFFI_TIMEOUT,
+                timeout=attempt_timeout,
                 verify=True,
             ) as cffi_session:
-                response = await cffi_session.get(fav_url, allow_redirects=True)
+                # wait_for rather than relying on curl_cffi's own timeout: a
+                # source that ignores the connection timeout leaves the task
+                # suspended indefinitely, and a task cancellation delivered
+                # inside `async with` + try/finally does not resume the loop.
+                response = await asyncio.wait_for(
+                    cffi_session.get(fav_url, allow_redirects=True),
+                    timeout=attempt_timeout,
+                )
                 response.raise_for_status()
                 data = response.content
                 if data and len(data) > 100:
@@ -256,6 +294,12 @@ async def generate_favicon_composite(url: str) -> str | None:
                     break
         except Exception:
             continue
+        finally:
+            # Measured-clock accounting: whatever the outcome, the wall time
+            # spent on this attempt is deducted from the favicon budget.
+            favicon_budget = max(
+                favicon_budget - (time.monotonic() - attempt_started), 0.0
+            )
 
     if not fav_data:
         logger.warning("Favicon download failed for %s (all sources)", domain)

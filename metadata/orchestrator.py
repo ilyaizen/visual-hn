@@ -282,12 +282,17 @@ async def fetch_metadata(
             logger.warning("Skipping screenshot fallback for unsafe URL %s", final_url)
 
     if not image_filename and not og_image_url:
-        # Favicon composite is exempt from the deadline check. It is a cheap,
-        # fast operation (Google S2 fetch + local render) and the last line of
-        # defense before a story degrades to a bare placeholder. Earlier layers
-        # (residential fetcher) can burn the entire budget; without this
-        # exemption those stories end up with no visual identity at all.
-        image_filename = await generate_favicon_composite(url)
+        # Favicon composite is the one documented exception to the deadline
+        # check (VH-02): it is a cheap, fast operation (Google S2 / DDG icon
+        # fetch + local render) and the last line of defense before a story
+        # degrades to a bare placeholder. Earlier layers (residential
+        # fetcher) can burn the entire budget; without this exemption those
+        # stories end up with no visual identity at all. The exception is
+        # bounded inside generate_favicon_composite: at most
+        # FAVICON_BUDGET_SECONDS (VHN_FAVICON_BUDGET, default 10s) of extra
+        # wall time, so the overall path stays within
+        # METADATA_DEADLINE_SECONDS + FAVICON_BUDGET_SECONDS.
+        image_filename = await generate_favicon_composite(url, deadline=deadline)
 
     # ── Track which layer ultimately resolved the image ──
     # og_image/wayback_og are counted inline where the og:image is found.

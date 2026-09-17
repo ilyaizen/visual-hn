@@ -32,7 +32,7 @@ async def test_favicon_composite_runs_after_deadline_exhausted(monkeypatch):
     async def no_screenshot(url, timeout_override=None):
         return None
 
-    async def fake_favicon(url):
+    async def fake_favicon(url, deadline=None):
         return "fav-testcard.jpg"
 
     monkeypatch.setattr(orchestrator, "_curl_cffi_fetch_html", no_html)
@@ -65,7 +65,7 @@ async def test_favicon_composite_failure_still_yields_placeholder(monkeypatch):
     async def no_screenshot(url, timeout_override=None):
         return None
 
-    async def no_favicon(url):
+    async def no_favicon(url, deadline=None):
         return None
 
     monkeypatch.setattr(orchestrator, "_curl_cffi_fetch_html", no_html)
