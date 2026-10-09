@@ -123,7 +123,28 @@ def test_header_rebrand_script_targets_header_title_without_rebranding_descripto
     assert "#header h1 a" in script
     assert "#header .tagline" in script
     assert "hcker.news+" in script
-    assert "TITLE_RE = /^hcker\\.news$/i" in script
+    assert "TITLE_RE = /^hcker\\.news\\+?$/i" in script
+    assert (
+        "FULL_TITLE = 'hcker.news+ – A Better Hcker.news Reader with Previews'" in script
+    )
+
+
+def test_rewrite_meta_tags_sets_full_branded_page_title():
+    html = (
+        "<html><head>"
+        "<title>hcker.news – A Better Hacker News Reader</title>"
+        '<meta property="og:title" content="hcker.news – A Better Hacker News Reader">'
+        '<meta name="description" content="A Better Hacker News Reader">'
+        "</head><body></body></html>"
+    )
+
+    rewritten = hcker_proxy.rewrite_meta_tags(html)
+
+    assert (
+        "<title>hcker.news+ – A Better Hcker.news Reader with Previews</title>"
+        in rewritten
+    )
+    assert "Hacker News Reader" not in rewritten
 
 
 def test_extension_loads_header_rebrand_on_hcker_news():
