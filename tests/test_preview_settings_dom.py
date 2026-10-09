@@ -61,6 +61,79 @@ def test_vhn_settings_section_stays_inside_closed_upstream_settings_content():
         browser.close()
 
 
+def test_vhn_settings_gets_dedicated_preview_tab_and_panel():
+    """VHN settings live in their own 'Preview' tab beside Main/Filters."""
+    html = """
+    <main>
+      <div id="settings-panel">
+        <div id="settings-content">
+          <div id="settings-tablist">
+            <button type="button" id="settings-tab-settings" class="settings-tab-button is-active" role="tab" aria-selected="true" tabindex="0">Main</button>
+            <button type="button" id="settings-tab-filters" class="settings-tab-button" role="tab" aria-selected="false" tabindex="-1">Filters</button>
+          </div>
+          <div id="settings-tab-panels">
+            <div id="settings-tab-panel-settings" class="settings-tab-panel is-active" role="tabpanel"><div class="settings-sections-wrapper"></div></div>
+            <div id="settings-tab-panel-filters" class="settings-tab-panel" role="tabpanel" hidden><div class="settings-sections-wrapper"></div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    """
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(html)
+        page.add_script_tag(
+            content="""
+            window.VHN = {
+              findRows: () => [],
+              titleAnchor: () => null,
+              titleHost: () => null,
+              fetchImages: async () => new Map(),
+              apiOk: true,
+            };
+            """
+        )
+        page.add_script_tag(content=CONTENT_SCRIPT)
+        page.wait_for_timeout(350)
+
+        assert page.locator("#settings-tab-vhn").count() == 1
+        assert (
+            page.locator("#settings-tab-vhn .settings-tab-label").inner_text()
+            == "Preview"
+        )
+        assert (
+            page.locator("#settings-tab-filters").evaluate(
+                "(el) => el.nextElementSibling && el.nextElementSibling.id"
+            )
+            == "settings-tab-vhn"
+        )
+        assert page.locator(
+            "#settings-tab-panel-vhn > .settings-sections-wrapper > #vhn-previews-settings-section"
+        ).count() == 1
+        assert page.locator(
+            "#settings-tab-panel-settings #vhn-previews-settings-section"
+        ).count() == 0
+        assert page.locator("#settings-tab-panel-vhn").is_hidden()
+
+        page.locator("#settings-tab-vhn").click()
+        page.wait_for_timeout(150)
+
+        assert page.locator("#settings-tab-vhn").get_attribute("aria-selected") == "true"
+        assert page.locator("#settings-tab-panel-vhn").is_visible()
+
+        # Upstream's tab handler ignores foreign tabs — ours must clear itself.
+        # (Filters activation itself is upstream's job, not present in this mock.)
+        page.locator("#settings-tab-filters").click()
+        page.wait_for_timeout(150)
+
+        assert page.locator("#settings-tab-vhn").get_attribute("aria-selected") == "false"
+        assert page.locator("#settings-tab-panel-vhn").is_hidden()
+
+        browser.close()
+
+
 def test_image_position_reinjects_and_repositions_hover_preview():
     html = """
     <main>

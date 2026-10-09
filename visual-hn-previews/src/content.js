@@ -811,13 +811,62 @@
   }
 
   // ------------------------------------------------ hcker.news settings panel
-  // Injected as another category INSIDE hcker.news's existing settings tab
-  // (not a separate top-level tab) — appended to the first tab panel found.
+  // Owns a dedicated 'Preview' category: a tab button in #settings-tablist and
+  // a matching .settings-tab-panel in #settings-tab-panels, alongside the
+  // upstream 'Main' / 'Filters' tabs. Falls back to injecting the section into
+  // the existing tab panel when upstream's tab shell is missing.
   let vhnSectionEl = null;
+  let vhnTabEl = null;
+  let vhnTabPanelEl = null;
   let settingsRenderScheduled = false;
 
   function findSettingsPanel() {
     return document.querySelector('#settings-panel, .settings-panel');
+  }
+
+  function clearVhnTabActive() {
+    if (vhnTabEl) {
+      vhnTabEl.classList.remove('is-active');
+      vhnTabEl.setAttribute('aria-selected', 'false');
+      vhnTabEl.setAttribute('tabindex', '-1');
+    }
+    if (vhnTabPanelEl) {
+      vhnTabPanelEl.classList.remove('is-active');
+      vhnTabPanelEl.hidden = true;
+    }
+  }
+
+  function activateVhnTab() {
+    if (!vhnTabEl || !vhnTabPanelEl) return;
+    const tablist = vhnTabEl.parentElement;
+    const panelsHost = vhnTabPanelEl.parentElement;
+    tablist.querySelectorAll('.settings-tab-button').forEach((b) => {
+      const active = b === vhnTabEl;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-selected', String(active));
+      b.setAttribute('tabindex', active ? '0' : '-1');
+    });
+    panelsHost.querySelectorAll('.settings-tab-panel').forEach((p) => {
+      const active = p === vhnTabPanelEl;
+      p.classList.toggle('is-active', active);
+      p.hidden = !active;
+    });
+  }
+
+  function wireVhnTabEvents(tablist) {
+    if (tablist.dataset.vhnTabWired) return;
+    tablist.dataset.vhnTabWired = '1';
+    // Upstream's tab handler only tracks its own tabs — a native click never
+    // deactivates ours, so listen in capture phase and clear it ourselves.
+    tablist.addEventListener(
+      'click',
+      (ev) => {
+        const btn = ev.target.closest('.settings-tab-button');
+        if (!btn || btn.id === 'settings-tab-vhn') return;
+        clearVhnTabActive();
+      },
+      true
+    );
   }
 
   function buildVhnSection() {
@@ -1024,17 +1073,88 @@
     const settingsPanel = findSettingsPanel();
     if (!settingsPanel) return false;
 
+    const tablist =
+      settingsPanel.querySelector('#settings-tablist') ||
+      settingsPanel.querySelector('.settings-tablist');
+    const panelsHost =
+      settingsPanel.querySelector('#settings-tab-panels') ||
+      settingsPanel.querySelector('.settings-tab-panels');
+
     vhnSectionEl = settingsPanel.querySelector('#vhn-previews-settings-section');
-    if (!vhnSectionEl) {
-      // hcker.news now keeps closed settings inside #settings-content. Inserting
-      // at the sticky panel root leaves this section visible on every refresh.
-      const targetPanel =
-        settingsPanel.querySelector('.settings-tab-panel') ||
-        settingsPanel.querySelector('#settings-content') ||
-        settingsPanel;
-      const wrapper = targetPanel.querySelector('.settings-sections-wrapper') || targetPanel;
-      vhnSectionEl = buildVhnSection();
-      wrapper.prepend(vhnSectionEl);
+    vhnTabEl = settingsPanel.querySelector('#settings-tab-vhn');
+    vhnTabPanelEl = settingsPanel.querySelector('#settings-tab-panel-vhn');
+
+    if (!tablist || !panelsHost) {
+      // Upstream tab shell missing: fall back to section inside the tab panel.
+      if (!vhnSectionEl) {
+        const targetPanel =
+          settingsPanel.querySelector('.settings-tab-panel') ||
+          settingsPanel.querySelector('#settings-content') ||
+          settingsPanel;
+        const wrapper = targetPanel.querySelector('.settings-sections-wrapper') || targetPanel;
+        vhnSectionEl = buildVhnSection();
+        wrapper.prepend(vhnSectionEl);
+      }
+      return true;
+    }
+
+    wireVhnTabEvents(tablist);
+
+    // SPA re-renders may replace the tablist/panels wholesale; rebuild ours.
+    if (!vhnSectionEl || !vhnTabEl || !vhnTabPanelEl) {
+      if (vhnTabPanelEl && vhnTabPanelEl.parentElement !== panelsHost) vhnTabPanelEl = null;
+      if (vhnTabEl && vhnTabEl.parentElement !== tablist) vhnTabEl = null;
+
+      if (!vhnTabEl) {
+        vhnTabEl = document.createElement('button');
+        vhnTabEl.type = 'button';
+        vhnTabEl.id = 'settings-tab-vhn';
+        vhnTabEl.className = 'settings-tab-button';
+        vhnTabEl.setAttribute('role', 'tab');
+        vhnTabEl.setAttribute('aria-selected', 'false');
+        vhnTabEl.setAttribute('aria-controls', 'settings-tab-panel-vhn');
+        vhnTabEl.setAttribute('tabindex', '-1');
+        vhnTabEl.setAttribute('data-settings-tab', 'vhn');
+        const label = document.createElement('span');
+        label.className = 'settings-tab-label';
+        label.textContent = 'Preview';
+        vhnTabEl.appendChild(label);
+        const filtersTab = tablist.querySelector('#settings-tab-filters');
+        if (filtersTab && filtersTab.nextSibling) {
+          tablist.insertBefore(vhnTabEl, filtersTab.nextSibling);
+        } else {
+          tablist.appendChild(vhnTabEl);
+        }
+      }
+
+      if (!vhnTabPanelEl) {
+        vhnTabPanelEl = document.createElement('div');
+        vhnTabPanelEl.id = 'settings-tab-panel-vhn';
+        vhnTabPanelEl.className = 'settings-tab-panel';
+        vhnTabPanelEl.setAttribute('role', 'tabpanel');
+        vhnTabPanelEl.setAttribute('aria-labelledby', 'settings-tab-vhn');
+        vhnTabPanelEl.setAttribute('data-settings-tab-panel', 'vhn');
+        vhnTabPanelEl.hidden = true;
+        const wrap = document.createElement('div');
+        wrap.className = 'settings-sections-wrapper';
+        vhnTabPanelEl.appendChild(wrap);
+        panelsHost.appendChild(vhnTabPanelEl);
+      }
+
+      if (!vhnSectionEl) {
+        vhnSectionEl = buildVhnSection();
+        vhnTabPanelEl.querySelector('.settings-sections-wrapper').appendChild(vhnSectionEl);
+      }
+
+      vhnTabEl.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateVhnTab();
+      });
+    }
+
+    if (vhnTabEl.classList.contains('is-active')) {
+      vhnTabPanelEl.classList.add('is-active');
+      vhnTabPanelEl.hidden = false;
     }
 
     return true;
@@ -1043,6 +1163,13 @@
   function renderVhnSettings() {
     if (!ensureVhnSettingsPanel()) return;
     const vhnPanelEl = vhnSectionEl;
+
+    const tabActive = vhnTabEl && vhnTabEl.classList.contains('is-active');
+    if (vhnTabEl && vhnTabPanelEl) {
+      vhnTabEl.setAttribute('aria-selected', String(tabActive));
+      vhnTabPanelEl.classList.toggle('is-active', tabActive);
+      vhnTabPanelEl.hidden = !tabActive;
+    }
 
     updateDropdownText('#vhn-size-trigger', '#vhn-size-menu', settings.imageSize);
     updateDropdownText('#vhn-ar-trigger', '#vhn-ar-menu', settings.aspectRatio);
@@ -1125,7 +1252,12 @@
   function onMutation() {
     if (!isFeedPage()) return;
     scheduleScan();
-    if (!vhnSectionEl || !document.documentElement.contains(vhnSectionEl)) {
+    if (
+      !vhnSectionEl ||
+      !document.documentElement.contains(vhnSectionEl) ||
+      !vhnTabEl ||
+      !document.documentElement.contains(vhnTabEl)
+    ) {
       vhnSectionEl = null;
       scheduleSettingsRender();
     }

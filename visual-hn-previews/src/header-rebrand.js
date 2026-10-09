@@ -6,7 +6,18 @@
 
   const BRANDED = 'hcker.news+';
   const TAGLINE_HTML = 'a <a href="https://hcker.news/" target="_blank" rel="noopener">hcker.news</a> reader with previews';
-  const TITLE_RE = /^hcker\.news$/i;
+  const FULL_TITLE = 'hcker.news+ – A Better Hcker.news Reader with Previews';
+  // Brand titles only: bare 'hcker.news', branded 'hcker.news+', or the SPA's
+  // runtime forms with an emoji prefix. Anchored, so story titles like
+  // 'Comments – Comments – hcker.news' are never rewritten.
+  const TITLE_RE = /^hcker\.news\+?$/i;
+
+  function normalizeTitle(val) {
+    if (typeof val !== 'string') return null;
+    const t = val.trim().replace(/^🐴\s*/, '');
+    if (t === FULL_TITLE || TITLE_RE.test(t)) return FULL_TITLE;
+    return null;
+  }
 
   let applying = false;
   let scheduled = false;
@@ -29,8 +40,9 @@
       setText(document.querySelector('#header h1 a'), BRANDED);
       setTaglineHtml(document.querySelector('#header .tagline'), TAGLINE_HTML);
 
-      if (document.title && TITLE_RE.test(document.title.trim())) {
-        document.title = BRANDED;
+      const branded = normalizeTitle(document.title);
+      if (branded) {
+        document.title = branded;
       }
     } finally {
       applying = false;
@@ -66,11 +78,7 @@
       Object.defineProperty(document, 'title', {
         get: desc.get,
         set: function (val) {
-          if (typeof val === 'string' && TITLE_RE.test(val.trim())) {
-            desc.set.call(this, BRANDED);
-          } else {
-            desc.set.call(this, val);
-          }
+          desc.set.call(this, normalizeTitle(val) || val);
         },
         configurable: true,
       });

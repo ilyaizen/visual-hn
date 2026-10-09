@@ -36,7 +36,7 @@ def _get_feed_enrichment():
 
 HCKER_NEWS_ORIGIN = "https://hcker.news"
 EXTENSION_DIR = Path(__file__).parent / "visual-hn-previews"
-PREVIEW_RUNTIME_VERSION = "20261009-v59"
+PREVIEW_RUNTIME_VERSION = "20261009-v60"
 
 # ── Simple TTL cache for upstream fetches ──────────────────────────────────
 # Avoids re-fetching hcker.news on every single request.  Two-tier TTL:
@@ -283,6 +283,7 @@ def rewrite_meta_tags(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
 
     VHN_TITLE = "hcker.news+"
+    VHN_PAGE_TITLE = "hcker.news+ – A Better Hcker.news Reader with Previews"
     VHN_DESC = (
         "hcker.news+ — a hcker.news reader with previews. "
         "Preview images, rank badges, and trend arrows for every story."
@@ -320,10 +321,10 @@ def rewrite_meta_tags(html: str) -> str:
         ):
             meta["content"] = tag_map[(attr_key, attr_val)]
 
-    # <title> tag — regex like inject_preview_assets does, but consolidated here
+    # <title> tag — full branded reader title, not just the brand name
     title_tag = soup.find("title")
     if title_tag:
-        title_tag.string = VHN_TITLE
+        title_tag.string = VHN_PAGE_TITLE
 
     return str(soup)
 
