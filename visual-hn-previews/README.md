@@ -1,4 +1,4 @@
-# Visual-HN
+# hcker.news+
 
 Chrome/Edge extension showing story image previews and descriptions beside the headlines.
 

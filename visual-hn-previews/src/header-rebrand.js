@@ -4,8 +4,8 @@
   // Signal that JS is active for progressive-enhancement CSS
   document.documentElement.classList.add('js');
 
-  const BRANDED = 'visual-hn';
-  const TAGLINE_HTML = 'a <a href="https://hcker.news/" target="_blank" rel="noopener">hcker.news</a> reader with pictures';
+  const BRANDED = 'hcker.news+';
+  const TAGLINE_HTML = 'a <a href="https://hcker.news/" target="_blank" rel="noopener">hcker.news</a> reader with previews';
   const TITLE_RE = /^hcker\.news$/i;
 
   let applying = false;
