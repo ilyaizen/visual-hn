@@ -36,7 +36,7 @@ def _get_feed_enrichment():
 
 HCKER_NEWS_ORIGIN = "https://hcker.news"
 EXTENSION_DIR = Path(__file__).parent / "visual-hn-previews"
-PREVIEW_RUNTIME_VERSION = "20260908-v58"
+PREVIEW_RUNTIME_VERSION = "20261009-v59"
 
 # ── Simple TTL cache for upstream fetches ──────────────────────────────────
 # Avoids re-fetching hcker.news on every single request.  Two-tier TTL:
@@ -198,7 +198,7 @@ def rewrite_proxy_header(html: str) -> str:
     """Brand the proxied hcker.news header for this preview-enhanced reader."""
     soup = BeautifulSoup(html, "html.parser")
 
-    BRAND_TEXT = "visual-hn"
+    BRAND_TEXT = "hcker.news+"
 
     container = None
     for tag_name in (["header", "nav"], ["body"]):
@@ -245,7 +245,7 @@ def rewrite_proxy_header(html: str) -> str:
     tagline = container.find("span", class_="tagline")
     if tagline:
         tagline.clear()
-        tagline.string = "hcker.news reader with pictures"
+        tagline.string = "hcker.news reader with previews"
 
     # Inject a GitHub link into the header-links row (after "about")
     links_container = container.find(class_="header-links")
@@ -282,9 +282,9 @@ def rewrite_meta_tags(html: str) -> str:
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    VHN_TITLE = "visual-hn"
+    VHN_TITLE = "hcker.news+"
     VHN_DESC = (
-        "visual.hcker.news — a hcker.news reader with pictures. "
+        "hcker.news+ — a hcker.news reader with previews. "
         "Preview images, rank badges, and trend arrows for every story."
     )
     VHN_URL = "https://hn.is-ai-good-yet.com/"

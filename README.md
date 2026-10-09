@@ -1,6 +1,6 @@
-# visual.hcker.news
+# hcker.news+
 
-Visual-HN with preview images/Open Graph metadata, descriptions, zoom, position trends, and more — a FastAPI proxy that enriches [hcker.news](https://hcker.news) (itself a [Hacker News](https://news.ycombinator.com/) clone) stories with Open Graph imagery and metadata, then serves them to a browser extension that overlays the feed.
+hcker.news+ with preview images/Open Graph metadata, descriptions, zoom, position trends, and more — a FastAPI proxy that enriches [hcker.news](https://hcker.news) (itself a [Hacker News](https://news.ycombinator.com/) clone) stories with Open Graph imagery and metadata, then serves them to a browser extension that overlays the feed.
 
 **Live:** [hn.is-ai-good-yet.com](https://hn.is-ai-good-yet.com)
 
