@@ -26,6 +26,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from contextlib import suppress
 from io import BytesIO
 
@@ -43,6 +44,19 @@ MIN_IMAGE_WIDTH = 400
 MIN_IMAGE_HEIGHT = 100
 VIEWPORT_WIDTH = 1280
 VIEWPORT_HEIGHT = 900
+
+# Wall-clock deadline for the whole per-page capture phase (goto + style
+# injection + screenshot). A page whose JS never settles previously wedged a
+# renderer at ~100% CPU for 3.5 days (2026-10-25 incident): page.goto's own
+# timeout doesn't cover post-load JS, and add_style_tag/screenshot protocol
+# calls can hang indefinitely waiting for a busy renderer.
+SCREENSHOT_DEADLINE_S = int(os.environ.get("VHN_SCREENSHOT_DEADLINE_S", "60"))
+# Hard cap on context.close() — close itself hangs on a wedged renderer.
+_CLOSE_TIMEOUT_S = 5
+# Recycle the browser singleton after this many screenshots or this much
+# uptime, so leaked/wedged renderers can't accumulate for weeks.
+BROWSER_MAX_SHOTS = int(os.environ.get("VHN_BROWSER_MAX_SHOTS", "50"))
+BROWSER_MAX_AGE_S = int(os.environ.get("VHN_BROWSER_MAX_AGE_S", "3600"))
 
 # Headless Chrome on Linux defaults to UA "HeadlessChrome/148" which is an
 # instant bot tell. Use a regular Linux Chrome UA. The VPS runs Linux glibc, so
@@ -62,6 +76,8 @@ _COSMETIC_CSS = filter_lists.get_cosmetic_css()
 # --- Browser singleton ---
 _browser: object | None = None  # playwright.async_api.Browser
 _playwright: object | None = None  # playwright.async_api.Playwright
+_browser_started_at: float = 0.0  # time.monotonic() at launch
+_screenshots_since_launch = 0
 _browser_lock = asyncio.Lock()
 
 
@@ -70,11 +86,27 @@ async def _get_browser():
 
     The browser process persists across screenshot calls. Each screenshot
     creates its own context (isolated cookies, route handlers, viewport).
-    Auto-relaunches if the process crashed.
+    Auto-relaunches if the process crashed, or proactively recycles the
+    browser after ``BROWSER_MAX_SHOTS`` screenshots or ``BROWSER_MAX_AGE_S``
+    uptime so a leaked/wedged renderer cannot survive for weeks.
     """
-    global _browser, _playwright
+    global _browser, _playwright, _browser_started_at, _screenshots_since_launch
     if _browser and _browser.is_connected():
-        return _browser
+        age = time.monotonic() - _browser_started_at
+        if _screenshots_since_launch >= BROWSER_MAX_SHOTS or age >= BROWSER_MAX_AGE_S:
+            logger.info(
+                "Recycling screenshot browser (age %ds, %d screenshots)",
+                int(age),
+                _screenshots_since_launch,
+            )
+            with suppress(Exception):
+                await _browser.close()
+            _browser = None
+            with suppress(Exception):
+                await _playwright.stop()
+            _playwright = None
+        else:
+            return _browser
     async with _browser_lock:
         if _browser and _browser.is_connected():
             return _browser
@@ -98,8 +130,23 @@ async def _get_browser():
                 "--disable-blink-features=AutomationControlled",
             ]
         )
+        _browser_started_at = time.monotonic()
+        _screenshots_since_launch = 0
         logger.info("Screenshot browser singleton launched")
         return _browser
+
+
+async def _close_context(context) -> None:
+    """Close a capture context with a hard cap.
+
+    ``context.close()`` is a protocol call that waits on the renderer; on a
+    page whose JS never yields it can hang forever, leaking the renderer and
+    holding the screenshot lock. Bound it.
+    """
+    if context is None:
+        return
+    with suppress(Exception):
+        await asyncio.wait_for(context.close(), timeout=_CLOSE_TIMEOUT_S)
 
 
 async def shutdown_browser():
@@ -135,16 +182,21 @@ async def capture_screenshot(url: str) -> str | None:
     """Capture a screenshot of ``url`` using headless Chromium.
 
     Network requests matching the Fanboy Cookie filter list are aborted; a
-    cosmetic stylesheet hides inline banners. Saves a resized JPEG and returns
-    the filename, or None on failure.
+    cosmetic stylesheet hides inline banners. The whole per-page phase is
+    bounded by ``SCREENSHOT_DEADLINE_S`` and the context is always closed with
+    a hard cap. Saves a resized JPEG and returns the filename, or None on
+    failure.
     """
     from playwright.async_api import Error as PlaywrightError
+
+    global _screenshots_since_launch
 
     async with screenshot_lock:
         image_filename: str | None = None
         context = None
         try:
             browser = await _get_browser()
+            _screenshots_since_launch += 1
             context = await browser.new_context(
                 user_agent=SCREENSHOT_UA,
                 viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
@@ -181,47 +233,58 @@ async def capture_screenshot(url: str) -> str | None:
 
             await page.route("**/*", _block_route)
 
-            response = None
-            try:
-                response = await page.goto(
-                    url, wait_until="domcontentloaded", timeout=35_000
-                )
-            except PlaywrightError as exc:
-                logger.warning("Page load issue for %s: %s", url, exc)
-
-            if response is not None and not response.ok:
-                logger.warning(
-                    "Skipping screenshot for %s — HTTP %d (non-2xx)",
-                    url,
-                    response.status,
-                )
-                await context.close()
-                return None
-
-            # Layer 2: hide inline / first-party banners via CSS
-            if _COSMETIC_CSS:
+            async def _capture_page():
+                response = None
                 try:
-                    await page.add_style_tag(content=_COSMETIC_CSS)
+                    response = await page.goto(
+                        url, wait_until="domcontentloaded", timeout=35_000
+                    )
                 except PlaywrightError as exc:
-                    logger.debug("Failed to inject cosmetic CSS for %s: %s", url, exc)
+                    logger.warning("Page load issue for %s: %s", url, exc)
 
-            await asyncio.sleep(1.5)
-            screenshot_png = await page.screenshot(type="png", full_page=False)
-            await context.close()
-        except PlaywrightError as exc:
-            logger.error("Playwright screenshot error for %s: %s", url, exc)
-            if context:
-                with suppress(Exception):
-                    await context.close()
-            return None
+                if response is not None and not response.ok:
+                    logger.warning(
+                        "Skipping screenshot for %s — HTTP %d (non-2xx)",
+                        url,
+                        response.status,
+                    )
+                    return None
+
+                # Layer 2: hide inline / first-party banners via CSS
+                if _COSMETIC_CSS:
+                    try:
+                        await page.add_style_tag(content=_COSMETIC_CSS)
+                    except PlaywrightError as exc:
+                        logger.debug(
+                            "Failed to inject cosmetic CSS for %s: %s", url, exc
+                        )
+
+                await asyncio.sleep(1.5)
+                return await page.screenshot(type="png", full_page=False)
+
+            try:
+                screenshot_png = await asyncio.wait_for(
+                    _capture_page(), timeout=SCREENSHOT_DEADLINE_S
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Screenshot deadline %ss exceeded for %s — abandoning page",
+                    SCREENSHOT_DEADLINE_S,
+                    url,
+                )
+                return None
+            except PlaywrightError as exc:
+                logger.error("Playwright screenshot error for %s: %s", url, exc)
+                return None
+            if screenshot_png is None:
+                return None
         except Exception as exc:
             logger.error(
                 "Unexpected screenshot error for %s: %s", url, exc, exc_info=True
             )
-            if context:
-                with suppress(Exception):
-                    await context.close()
             return None
+        finally:
+            await _close_context(context)
 
         # --- Save + resize (same logic as the old Selenium path) ---
         image_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
